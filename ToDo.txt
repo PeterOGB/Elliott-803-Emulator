@@ -1,0 +1,13 @@
+Move config files to ~/.803-Emulator
+Move shared filrs to /usr/local/share/803-Emulator
+Move glade file to /usr/local/share/803-Emulator/803-Emulator.glade
+
+
+
+ERROR
+CRITICAL
+WARNING
+MESSAGE
+INFO
+DEBUG
+

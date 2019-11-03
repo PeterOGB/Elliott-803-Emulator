@@ -1,0 +1,3 @@
+
+
+void LoggingInit(void);
