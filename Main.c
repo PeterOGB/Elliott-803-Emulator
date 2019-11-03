@@ -32,6 +32,7 @@
 #include "Charger.h"
 #include "PowerCabinet.h"
 #include "Cpu.h"
+#include "HoursRun.h"
 #include "Wiring.h"
 #include "Sound.h"
 
@@ -89,6 +90,7 @@ void EmulatorShutdown(void)
     // TEMPREMOVE DrawersTidy(configPath);
     // TEMPREMOVE PTSTidy(configPath);
     WordGenTidy(configPath);
+    HoursRunTidy(configPath);
     // TEMPREMOVEPTSTidy(configPath);
     // TEMPREMOVE CPUTidy(configPath);
 /* TEMPREMOVE 
@@ -151,6 +153,7 @@ int main(int argc, char *argv[])
 
     SoundInit(builder,sharedPath,configPath);
 
+    
     HandsInit(builder,sharedPath,configPath);
     WordGenInit(builder,sharedPath,configPath);
     ContactorInit(builder,sharedPath,configPath);
@@ -165,7 +168,7 @@ int main(int argc, char *argv[])
 
 // TEMPREMOVE    connectWires(MAINS_SUPPLY_ON,testMainsOn);
 // TEMPREMOVE    connectWires(MAINS_SUPPLY_OFF,testMainsOff);
-
+    HoursRunInit(builder,sharedPath,configPath);
     
     gtk_builder_connect_signals (builder, NULL);
     g_object_unref (G_OBJECT (builder));
