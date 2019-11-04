@@ -1572,7 +1572,14 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
     {
 
     case WORDGENWINDOW:
-	gtk_widget_queue_draw(WordGenDrawingArea);
+    { static int n = 0;
+	    n+=1;
+	    if(n == 1)
+	    {
+		gtk_widget_queue_draw(WordGenDrawingArea);
+		n = 0;
+	    }
+    }
 	break;
     case CONTACTORWINDOW:
 	gtk_widget_queue_draw(ContactorDrawingArea);

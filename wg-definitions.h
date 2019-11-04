@@ -1,3 +1,5 @@
+
+
 #pragma once
 /* Sybolic definitions for bits in WG_buttons */
 
@@ -16,5 +18,5 @@
 #define OBEY_WG_switch          (1U<<12)
 
 /* Rows */
-enum rows {F1=0,N1,F2,N2,OPERATE,RON,CS,MD,RESET,BATOFF,BATON,CPUOFF,CPUON,SELSTOP,ROWCOUNT};
+enum rows {F1=0,N1,F2,N2,OPERATE,RON,CS,MD,RESET,BATOFF,BATON,CPUOFF,CPUON,SELSTOP,ROWCOUNT}; 
 

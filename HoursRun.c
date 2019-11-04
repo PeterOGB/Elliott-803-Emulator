@@ -74,7 +74,7 @@ on_HoursRunDrawingArea_draw(__attribute__((unused)) GtkWidget *drawingArea,
 			  __attribute__((unused)) gpointer data)
 {
     int digit;
-    printf("%s called\n",__FUNCTION__);
+    //printf("%s called\n",__FUNCTION__);
 
     cairo_set_source_rgba (cr, 0.5,0.5,0.5,1.0);
    
@@ -116,7 +116,7 @@ static void HoursRunTimerTick(__attribute__((unused)) unsigned int dummy)
     static int counter = 0;
 
     if(Running) counter += 1;
-    if(counter < 100) return;
+    if(counter < 1) return;
     counter = 0;
 
     digitPositions[0] += STEP;

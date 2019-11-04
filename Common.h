@@ -58,3 +58,9 @@ struct sndEffect
     int frameCount;
 };
 struct sndEffect *readWavData(const char *wavFileName);
+
+
+/*
+#define REDRAW(w) if(!w##Pending){w##Pending=TRUE;gtk_widget_queue_draw(w);}
+#define DRAWN(w) {w##Pending=FALSE;}
+*/

@@ -18,10 +18,19 @@
 
 #define SOUNDS 1
 
+
+
+
 static GtkWidget *WordGenWindow;
 // WordGenDrawingArea should be static, but Hands.c uses it for now in animatiopn tests
 GtkWidget *WordGenDrawingArea;
 static GdkPixbuf *background_pixbuf;
+static gboolean DM160sChanged = TRUE;
+static double DM160Values[6] = {0.0,0.0,0.0,0.0,0.0,0.0};
+static int DM160s_y[] = {159,193,226,260,293,327};
+static int DM160s_x = 342;
+#define DM160_WIDE 14
+#define DM160_HIGH 3
 
 
 static gboolean InWordGenWindow = FALSE;
@@ -232,6 +241,8 @@ on_WordGenDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     GtkAllocation  DrawingAreaAlloc;
     struct buttonInfo *bp;
 
+    printf("%s called\n",__FUNCTION__);
+    
     if(firstCall)
     {
 	firstCall = FALSE;
@@ -288,6 +299,20 @@ on_WordGenDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	lampChanged = FALSE;
     }
 
+    if(DM160sChanged)
+    {
+	for(int DM160=0;DM160<6;DM160+=1)
+	{
+	    cairo_set_source_rgba(surfaceCr,0.0,DM160Values[DM160],0.0,1.0);
+	    cairo_rectangle (surfaceCr,DM160s_x, DM160s_y[DM160], DM160_WIDE,DM160_HIGH);
+	    cairo_fill (surfaceCr);
+	}
+	DM160sChanged = FALSE;
+    }
+
+
+
+    
     if(volumeChanged)
     {
 	int n;
@@ -457,6 +482,7 @@ KeyboardWindowEnterHandler(__attribute__((unused)) int s,
 	gdouble hx,hy;
 	updateHands(deferedMotionX,deferedMotionY,&hx,&hy);
 
+	
 	gtk_widget_queue_draw(WordGenDrawingArea);
 	
 	deferedMotion = FALSE;
@@ -1376,6 +1402,12 @@ static void powerOn(__attribute__((unused)) unsigned int dummy)
 {
     lampOn = TRUE;
     lampChanged = TRUE;
+
+    // Testing
+    DM160Values[0] = 1.0;
+    DM160sChanged = TRUE;
+
+
     gtk_widget_queue_draw(WordGenDrawingArea);
 }
 
@@ -1383,9 +1415,37 @@ static void powerOff(__attribute__((unused)) unsigned int dummy)
 {
     lampOn = FALSE;
     lampChanged = TRUE;
+
+    // Testing
+    DM160Values[0] = 0.0;
+    DM160sChanged = TRUE;
+    
     gtk_widget_queue_draw(WordGenDrawingArea);
 }
+
+
+extern int DM160s_bright[6];
+static void updateDM160s(__attribute__((unused)) unsigned int dummy)
+{
+
+    /* With a 20Hz emulation cycle, max value should be 
+       1/288E-6 / 20 = 173.111
+    */
+
+    printf("%s called\n",__FUNCTION__);
     
+    // Copy values from Emualte.c and set flag
+    for(int n=0;n<6;n++) DM160Values[n] = DM160s_bright[n] / 174.0;
+    DM160sChanged = TRUE;
+    if(!InWordGenWindow)
+    {
+	printf("%s Redraw queued\n",__FUNCTION__);
+	gtk_widget_queue_draw(WordGenDrawingArea);
+    }
+}
+
+
+
 
 
 
@@ -2456,6 +2516,7 @@ void WordGenInit(GtkBuilder *builder,
 
     connectWires(SUPPLIES_ON, powerOn);
     connectWires(SUPPLIES_OFF,powerOff);
+    connectWires(UPDATE_DISPLAYS,updateDM160s);
     
     
     gtk_window_set_deletable(GTK_WINDOW(WordGenWindow),FALSE);
