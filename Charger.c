@@ -59,7 +59,7 @@ static double Ipunch = 0.0;
 static double Ibat;
 static double CurrentMeterReading;
 static double Vop;
-double Vbat = 0.0;
+double Vbat = 26.5;
 static double VoltageReading;
 static gboolean mainsAvailable = FALSE;
 
@@ -173,7 +173,7 @@ static gboolean chargerConnected = FALSE;
 static void ChargerConnected(__attribute__((unused)) unsigned int dummy)
 {
     //printf("%s called\n",__FUNCTION__);
-    Vbat = 26.5;
+    //Vbat = 26.5;
     //Icharger = 0.0;
     //Icomputer = 0.0;
     Va = Vb = Vc = Vd = Ve =  Vf = Vg = 0.0;
