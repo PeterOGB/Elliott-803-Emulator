@@ -26,4 +26,4 @@ int texttoword(const char *text,int address);
 enum IOINSTR {F71,F72,F74,F75,F76,F77};
 
 //uint8_t getClines(void);
-//void setCPUVolume(int16_t level);
+void setCPUVolume(unsigned int level);

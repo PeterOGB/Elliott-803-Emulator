@@ -21,6 +21,7 @@ unsigned int WG_ControlButtons;
 //unsigned int WG_ControlButtonReleases;
 
 bool WG_operate_pressed = false;
+unsigned int volume;
 
 static
 void dumpWord(E803word word)
@@ -38,11 +39,8 @@ void dumpWord(E803word word)
 }
 
 
-
-
-
-// Currently these are all just stubbs.
 // Wire handlers
+
 static void setF1(unsigned int value)
 {
     E803word bits = value;
@@ -232,6 +230,7 @@ void CpuInit(__attribute__((unused)) GtkBuilder *builder,
     connectWires(CSWIRE,setCS);
     connectWires(SSWIRE,setSS);
     connectWires(OPERATEWIRE,setOPERATE);
+    connectWires(VOLUME_CONTROL,setCPUVolume);
 
 
     CoreImageFileName = g_string_new(userPath->str);

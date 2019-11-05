@@ -159,7 +159,10 @@ static void WriteStore(int address, E803word *datae)
     CoreStore[address] = *datae;
 }
 
-
+void setCPUVolume(unsigned int level)
+{
+    CPUVolume = level * 0x40;
+}
 
 // Called before emulate to handle button presses etc.
 void PreEmulate(bool updateFlag)
@@ -3127,7 +3130,7 @@ int getBattery_on_state(void)
 
 void setCPUVolume(int16_t level)
 {
-    CPUVolume = level;
+    CPUVolume = level * 0x40;
 }
 
 
