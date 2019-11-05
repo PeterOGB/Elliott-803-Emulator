@@ -7,9 +7,9 @@
 float channel1charTime,channel2charTime,channel3charTime;
 
 void Emulate(int wordTimesToEmulate);
-void PreEmulate(gboolean updateFlag);
-void PostEmulate(gboolean updateFlag);
-
+void PreEmulate(bool updateFlag);
+void PostEmulate(bool updateFlag);
+void StartEmulate(char *coreFileName);
 
 //void makeSamples(int percent);
 
@@ -21,9 +21,9 @@ int getPTSpower(void);
 
 //void externalRestartEmulation(void);
 int texttoword(const char *text,int address);
-uint8_t *TransferAndFinish(gboolean Transfer,gboolean Finish,int count,uint8_t *data);
+//uint8_t *TransferAndFinish(gboolean Transfer,gboolean Finish,int count,uint8_t *data);
 
 enum IOINSTR {F71,F72,F74,F75,F76,F77};
 
-uint8_t getClines(void);
-void setCPUVolume(int16_t level);
+//uint8_t getClines(void);
+//void setCPUVolume(int16_t level);

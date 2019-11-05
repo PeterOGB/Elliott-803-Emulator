@@ -15,7 +15,7 @@
 
 
 
-E803word WG;
+extern E803word WG;
 unsigned int WG_ControlButtons;    
 //unsigned int WG_ControlButtonPresses;
 //unsigned int WG_ControlButtonReleases;
@@ -208,10 +208,18 @@ void CpuTidy(__attribute__((unused)) GString *userPath)
     g_info("%s called\n",__FUNCTION__);
 }
 
+
 void CpuInit(__attribute__((unused)) GtkBuilder *builder,
 	     __attribute__((unused)) GString *sharedPath,
-	     __attribute__((unused)) GString *userPath)
+	     __attribute__((unused)) GString *userPath,
+	     gchar *coreFileName)
+    
 {
+    GString *CoreImageFileName = NULL;
+    gchar *core = NULL;
+    gsize length;
+    GError *error = NULL;
+    
     //g_info("%s called\n",__FUNCTION__);
 
     connectWires(F1WIRES,setF1);
@@ -224,6 +232,41 @@ void CpuInit(__attribute__((unused)) GtkBuilder *builder,
     connectWires(CSWIRE,setCS);
     connectWires(SSWIRE,setSS);
     connectWires(OPERATEWIRE,setOPERATE);
+
+
+    CoreImageFileName = g_string_new(userPath->str);
+    if(coreFileName != NULL)
+    {
+	g_string_append(CoreImageFileName,coreFileName);
+    }
+    else
+    {
+	g_string_append(CoreImageFileName,"CoreImage");
+    }
+
+
+    g_file_get_contents(CoreImageFileName->str,
+			&core,
+			&length,
+			&error);
+
+    g_info("Core image file Length = %" G_GUINT64_FORMAT "\n",length);
+
+    if(error != NULL)
+    {
+	g_warning("Failed to open core file %s, using a clear store\n",
+		  CoreImageFileName->str);
+		  
+	core = calloc(8192,sizeof(E803word));
+    }
+
+    
+
+
+    
+    StartEmulate(core);
+    
+    g_string_free(CoreImageFileName,TRUE);
 
     addSoundHandler(CPU_sound);
 }

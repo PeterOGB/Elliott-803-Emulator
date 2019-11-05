@@ -106,6 +106,18 @@ void EmulatorShutdown(void)
     gtk_main_quit();
 }
 
+gchar *coreFileName =  NULL;
+
+static GOptionEntry entries[] =
+{
+
+    { "corefile", 'c', 0, G_OPTION_ARG_FILENAME, &coreFileName, "Initial core store file", NULL },
+    { NULL }
+};
+
+
+
+
 
 int main(int argc, char *argv[])
 {
@@ -114,6 +126,9 @@ int main(int argc, char *argv[])
     struct passwd *pw;
     uid_t uid;
     GString *gladeFileName;
+    GError *error = NULL;
+    GOptionContext *context;
+    
     
     /* Set the locale according to environment variable */
     if (!setlocale(LC_CTYPE, ""))
@@ -141,6 +156,23 @@ int main(int argc, char *argv[])
 
     LoggingInit();
 
+    // New command line option parsing....
+
+    context = g_option_context_new ("- Elliott 803 Emulator");
+    g_option_context_add_main_entries (context, entries, NULL);
+    g_option_context_add_group (context, gtk_get_option_group (TRUE));
+    if (!g_option_context_parse (context, &argc, &argv, &error))
+    {
+      g_print ("option parsing failed: %s\n", error->message);
+      exit (1);
+    }
+
+    g_info("Core file set to %s\n",coreFileName);
+
+
+
+
+    
     // Create the GUI from 
     builder = gtk_builder_new();
 
@@ -153,6 +185,9 @@ int main(int argc, char *argv[])
 
     SoundInit(builder,sharedPath,configPath);
 
+    // Cpu must be set up before the keyboard so that the initial states of the
+    // buttons can be sent 
+    CpuInit(builder,sharedPath,configPath,coreFileName);
     
     HandsInit(builder,sharedPath,configPath);
     WordGenInit(builder,sharedPath,configPath);
@@ -163,7 +198,7 @@ int main(int argc, char *argv[])
     // TEMPREMOVEReaderInit(builder,sharedPath,configPath);
 // TEMPREMOVE    CreedKeyboardInit(builder,path,userpath);
     // TEMPREMOVESimpleDrawersInit(builder,sharedPath,configPath);
-    CpuInit(builder,sharedPath,configPath);
+    
     //PTSInit(builder,sharedPath,configPath);
 
 // TEMPREMOVE    connectWires(MAINS_SUPPLY_ON,testMainsOn);

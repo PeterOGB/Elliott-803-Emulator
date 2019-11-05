@@ -4,22 +4,54 @@
  * (C) 1990-2019 P.J.Onion
  */
 #include <stdio.h>
-
+#include <stdint.h>
+#include <inttypes.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include "E803-types.h"
+#include "E803ops.h"
+#include "Emulate.h"
+#include "wg-definitions.h"
 #include "Wiring.h"
+//#include "Sound.h"
+
+#define FILM 0
 
 
+extern void addSamplesFromCPU(int16_t first,int16_t remainder);
 
 // Defined in Cpu.c
-extern unsigned int WG_ControlButtons;    /**< State of the buttons like Reset etc */
+extern unsigned int WG_ControlButtons;    // State of the buttons like Reset etc 
 //extern unsigned int WG_ControlButtonPresses;
 //extern unsigned int WG_ControlButtonReleases;
 extern bool WG_operate_pressed;
 
+/* Various 803 registers */
+E803word ACC;           // The Accumulator
+E803word AR;            // Auxillary register used in double length working
+E803word MREG;          // Multipler
+E803word STORE_CHAIN;   // Data read from and written back into store
+E803word WG;            // value on the Word Generator buttons
+E803word QACC,QAR;      // Q register for double length multiply  
+E803word MANTREG;       // Mantissa and Exponents in fp maths 
+int T;                  // Number of places to shift in Gp 5 
+int EXPREG;
+
+/* Short values */
+int32_t BREG;       // For B modification 
+int32_t IR;         // Instruction register 
+int32_t SCR;        // Sequence Control Register 
+int32_t STORE_MS;   // Top half on store chain 
+int32_t STORE_LS;   // Bottom half on store chain 
+
+/* Some 803 constants */
+E803word E803_ONE  = 1;
+E803word E803_ZERO = 0;
+E803word E803_AR_MSB= 02000000000000; // Rounding bit for Fn 53 
 
 
 /* Various 803 internal sisnals */
-bool S = true;
+bool S;
 bool SS25;
 bool WI;         // Something to do with manual data
 bool SS2,SS3;    // Timing for operate to clear busy on Fn70
@@ -28,24 +60,105 @@ bool FPO;        // Gp6 / floating point overflow
 bool OFLOW;      // Integer overflow flag
 bool PARITY;
 bool L;          // Long function, prolongs R-bar (execute) phase
-bool B;          // Busy 
-
+bool LW;         // Last word time in some long functions */
+bool B;          // Busy
+bool M;          // B Modifier flag
+bool N;          // Read Button
 bool ALWAYS = true;   /* used for conditional jump decoding */
 bool NEGA,Z;
+bool GPFOUR;     // surpresses execute phase for jumps 
+bool TC;         // Transfer Contol for jumps
+bool J;          // Interrrupt request (unused) 
+
 
 bool *Conditions[] = {&ALWAYS,&NEGA,&Z,&OFLOW};
 
+
+/* Emulation variables */
+int32_t IR_saved;
+/* working space */
+E803word tmp;
+
 bool *DM160s_bits[] = {&PARITY,&L,&B,&FPO,&S,&OFLOW};
 int DM160s_bright[6];
-
+bool CpuRunning = false;
 
 int PTSBusyBright;
+
+int16_t CPUVolume = 0x100;
+
 
 /* The next two run since the emulator was started */ 
 unsigned int CPU_word_time_count = 0;
 unsigned int CPU_word_time_stop = 1;
 /* The next one refers to the current emulation cycle */
 unsigned int word_times_done =  0;
+
+E803word *CoreStore = NULL; 
+
+void fn00(void); void fn01(void); void fn02(void); void fn03(void);
+void fn04(void); void fn05(void); void fn06(void); void fn07(void);
+
+void fn10(void); void fn11(void); void fn12(void); void fn13(void);
+void fn14(void); void fn15(void); void fn16(void); void fn17(void);
+
+void fn20(void); void fn21(void); void fn22(void); void fn23(void);
+void fn24(void); void fn25(void); void fn26(void); void fn27(void);
+
+void fn30(void); void fn31(void); void fn32(void); void fn33(void);
+void fn34(void); void fn35(void); void fn36(void); void fn37(void);
+
+void fn40(void); void fn41(void); void fn42(void); void fn43(void);
+void fn44(void); void fn45(void); void fn46(void); void fn47(void);
+
+void fn50(void); void fn51(void); void fn52(void); void fn53(void);
+void fn54(void); void fn55(void); void fn56(void); void fn57(void);
+
+void fn60(void); void fn61(void); void fn62(void); void fn63(void);
+void fn64(void); void fn65(void); void fn66(void); void fn67(void);
+
+void fn70(void); void fn71(void); void fn72(void); void fn73(void);
+void fn74(void); void fn75(void); void fn76(void); void fn77(void);
+
+
+/** Jump table for 803 op codes */
+void (*functions[])(void) =
+{ fn00,fn01,fn02,fn03,fn04,fn05,fn06,fn07,
+  fn10,fn11,fn12,fn13,fn14,fn15,fn16,fn17,
+  fn20,fn21,fn22,fn23,fn24,fn25,fn26,fn27,
+  fn30,fn31,fn32,fn33,fn34,fn35,fn36,fn37,
+  fn40,fn41,fn42,fn43,fn44,fn45,fn46,fn47,
+  fn50,fn51,fn52,fn53,fn54,fn55,fn56,fn57,
+  fn60,fn61,fn62,fn63,fn64,fn65,fn66,fn67,
+  fn70,fn71,fn72,fn73,fn74,fn75,fn76,fn77};
+
+
+// New version 4/11/19
+static void FetchStore(int32_t address,
+		       int32_t *MSp, 
+		       int32_t *LSp, 
+		       E803word *STORE_READ)
+{
+    E803word readWord;
+    
+    address &= 8191;
+    readWord = CoreStore[address];
+  
+    *STORE_READ = readWord;
+    
+    *LSp = readWord &  0xFFFFF;  /* Bottom 20 bits */
+
+    readWord >>= 20;
+    
+    *MSp = readWord &  0xFFFFF; /* Top 20 bits */
+}
+
+static void WriteStore(int address, E803word *datae)
+{
+    address &= 8191;
+    CoreStore[address] = *datae;
+}
+
 
 
 // Called before emulate to handle button presses etc.
@@ -54,16 +167,18 @@ void PreEmulate(bool updateFlag)
 
     //printf("%s %s\n",__FUNCTION__,updateFlag?"TRUE":"FALSE");
 
-    // Does this need to check if the machine is on ?
-    if(WG_operate_pressed)
+    // Check if the machine is on 
+    if(CpuRunning)
     {
-	printf("Operate Bar pressed\n");
-	if(S) SS25 = true;
-	if(WI && !R) SS3 = true; /* 17/4/06 added !R */
+	if(WG_operate_pressed)
+	{
+	    printf("Operate Bar pressed\n");
+	    if(S) SS25 = true;
+	    if(WI && !R) SS3 = true; /* 17/4/06 added !R */
+	}
+	if(SS25) PARITY = FPO = false;
+    
     }
-    if(SS25) FPO = false;
-
-
     if(updateFlag)
     {
 	for(int n=0; n<6; n+=1)
@@ -73,7 +188,8 @@ void PreEmulate(bool updateFlag)
 	}
 
     }
-	
+    
+    
     PTSBusyBright = 0;
     word_times_done = 0;
 
@@ -96,26 +212,2271 @@ void PostEmulate(bool updateFlag)
 
 void Emulate(int wordTimesToEmulate)
 {
-
+    static int ADDRESS,fn;
+    
     while(wordTimesToEmulate--)
     {
+	if(CpuRunning)
+	{
+	    /* This is the heart of the emulation.  It fetches instructions and executes them. */
+	    if (R)
+	    { /* fetch */
+		// 23/2/10 There may be moreto do when reset is pressed, but not reseting OFLOW was the
+		// visible clue to the bug!
+		if (WG_ControlButtons & WG_reset)
+		{
+		    OFLOW = 0;
+		}
+		if (!S)
+		{ // Not stopped
+		    if (WG_ControlButtons & WG_clear_store)
+		    {
+			STORE_CHAIN = E803_ZERO;
+			STORE_LS = STORE_MS = 0;
+			M = 0;
+			if ((ADDRESS = IR & 8191) >= 4)
+			{
+			    CoreStore[ADDRESS] = STORE_CHAIN;
+			}
+		    }
+		    else
+		    {
 
-	
-    for(int n=0;n<6;n++)
-    {
-	if(*DM160s_bits[n]) DM160s_bright[n]+=1;
-    }
+			
+			
+			FetchStore(IR, &STORE_MS, &STORE_LS, &STORE_CHAIN);
+			if (SCR & 1) /* H or D */
+			{ /* F2 N2 */
+
+			    if (M == 0)
+			    { /* No B-mod */
+				IR = STORE_LS;
+				BREG = 0;
+			    }
+			    else
+			    { /* B-Mod */
+				
+				IR = STORE_LS + BREG;
+				BREG = 0;
+				M = false;
+			    }
+			}
+			else
+			{ /* F1 N1 */
+			    IR = STORE_MS;
+			    BREG = STORE_LS; /* Save for B-mod later */
+			    M = (STORE_LS & 0x80000) ? true : false;
+			}
+		    }
+		}
+
+		IR_saved = IR;
+
+		/* Need to check RON to see if S should be set */
+		S |= (WG_ControlButtons & (WG_read | WG_obey | WG_reset)) ? true
+		    : false;
 
 
+		/* Selected stop */
+		if(WG_ControlButtons & WG_selected_stop)
+		{
+		    //int n;
+		    //n = (WG.bytes[0] & 0xFF) + ((WG.bytes[1] << 8) & 0xFF00);
+		    //if( n  == ((SCR >> 1) & 8191))
 
-	addSamplesFromCPU(0x0000,0x0000);
+		    if((WG & 017777) == ((SCR >> 1) & 017777))
+		    {
+			S = true;
+		    }
+		}
+		if(SS25)
+		{
+		    printf("SS25 UP %x\n",WG_ControlButtons );
+		}
+		/* Do a single instruction if operate been pressed */
+		if (SS25 && (WG_ControlButtons & (WG_normal |WG_obey)))
+		{
+		    SS25 = S = false;
+		}
+
+		if (SS25 && (WG_ControlButtons & WG_read))
+		{
+
+		    N = true;
+		    M = false;
+		    SS25 = false;
+		}
+
+		
+		if (!S)
+		{
+		    fn = (IR >> 13) & 077;
+#if 0
+		    if (traceChannel != NULL)
+		    {
+			g_string_truncate(traceText,0);	
+
+			g_string_printf(traceText,"\nSCR= %"PRId32"%c IR = %02o %4"PRId32" \nACC=",
+					(SCR>>1),SCR & 1 ? '+' : ' ', fn,IR & 8191);
+			traceText = dumpWord(traceText,&ACC);
+
+			g_string_append_printf(traceText,"\nAR =");
+			traceText = dumpWord(traceText,&AR);
+
+			g_string_append_printf(traceText,"\nSTR=");
+			traceText= dumpWord(traceText,&CoreStore[IR & 8191]);
+
+			//g_string_append_c(traceText,');
+			g_io_channel_write_chars(traceChannel,traceText->str,-1,NULL,NULL);
+			//printf("%s\n",traceText->str);
+		    }
+#endif
+		    if ((fn & 070) == 040)
+		    {
+			GPFOUR = true;
+
+			if (*Conditions[fn & 3]) /* if(TC)  */
+			{
+			    SCR = ((IR & 8191) << 1) + ((fn >> 2) & 1);
+			    M = false;
+
+			    if ((fn & 3) == 3)
+				OFLOW = 0; 
+			    TC = true; /* set TC */
+			}
+			else
+			{
+			    TC = false;
+
+			    SCR += 1;
+			    SCR &= 16383;
+
+			}
+
+			IR = SCR >> 1;
+		    }
+
+		    else
+		    {
+			GPFOUR = false;
+			R = !R;
+		    }
+
+		    if (fn & 040)
+		    {
+			addSamplesFromCPU(0x0000, CPUVolume);
+		    }
+		    else
+		    {
+			addSamplesFromCPU(0x0000,0x0000);
+		    }
+		}
+		else
+		{ /* S == TRUE  --> stopped */
+
+		    if (N)
+		    {
+			IR = (WG >> 20) & 0x7FFFF;
+			N = false;
+		    }
+
+		    addSamplesFromCPU(0x0000,0x0000);
+		}
+		TC = GPFOUR = false;
+	    }
+	    else
+	    { /* execute R-bar*/
+		if (fn & 040)
+		{
+		    addSamplesFromCPU( CPUVolume, CPUVolume);
+		}
+		else
+		{
+		    addSamplesFromCPU(0x0000,0x0000);
+		}
+
+		ADDRESS = IR & 8191;
+
+		if (ADDRESS >= 4)
+		{
+		    STORE_CHAIN = CoreStore[ADDRESS];
+		}
+		else
+		{
+		    STORE_CHAIN = E803_ZERO;
+		}
+
+		/* Call the handler for the current instruction */
+		(functions[fn])();
+
+		if (ADDRESS >= 4)
+		{
+		    //hash(ADDRESS,STORE_CHAIN);
+		    CoreStore[ADDRESS] = STORE_CHAIN;
+		}
+
+		//Z = (ACC.bytes[0] | ACC.bytes[1] | ACC.bytes[2] | ACC.bytes[3]
+		//     | ACC.bytes[4]) ? FALSE : TRUE;
+
+		Z = (ACC & 07777777777777) ? false : true;
+
+		//NEGA = (ACC.bytes[4] & 0x40) ? TRUE : FALSE;
+
+		NEGA = (ACC & 04000000000000) ? true : false;
+		
+		/* Added PTSBusy to variables to set cleared by reset
+		   Fri Aug  8 20:20:31 BST 1997*/
+		{
+
+		    if (WG_ControlButtons & (WG_reset | WG_clear_store))
+		    {
+
+			OFLOW = B = L = J = 0; /*= F77State*/
+			//reader1CharBufferWrite = reader1CharBufferRead = 0;
+			// FIX THIS
+//			if (WG_ControlButtons & WG_reset)
+//			    doExternalDeviceFSM(STOP);
+		    }
+		}
+
+		if ( !(L | B))
+		{
+		    R = !R;
+
+		    SCR += 1;
+		    SCR &= 16383;
+
+		    /* If M is set, don't replace previous address in IR with SCR */
+		    if (!M)
+		    {
+			IR = SCR >> 1;
+		    }
+		}
+
+
+	    }
+
+	    for(int n=0;n<6;n++)
+	    {
+		if(*DM160s_bits[n]) DM160s_bright[n]+=1;
+	    }
+	}
+	else
+	{  // The computer is turned off, but there are still thing to do....
+
+	    addSamplesFromCPU(0x0000,0x0000);
+
+	}
     }
     
 
 }
 
 
+void fn00(void)
+{
 
+}
+
+void fn01(void)
+{
+    OFLOW |= E803_neg(&ACC,&ACC);
+}
+
+
+
+
+void fn02(void)
+{
+    ACC = STORE_CHAIN;
+    OFLOW |= E803_add(&E803_ONE,&ACC);
+}
+
+
+
+void fn03(void)
+{
+    E803_and(&STORE_CHAIN,&ACC);
+}
+
+void fn04(void)
+{
+    OFLOW |= E803_add(&STORE_CHAIN,&ACC);
+}
+
+void fn05(void)
+{
+    OFLOW |= E803_sub(&STORE_CHAIN,&ACC);
+}
+
+void fn06(void)
+{
+    ACC = E803_ZERO;
+}
+
+void fn07(void)
+{
+    OFLOW |= E803_neg_add(&STORE_CHAIN,&ACC);
+}
+
+
+void fn10(void)
+{
+    tmp = ACC;
+    ACC = STORE_CHAIN;
+    STORE_CHAIN = tmp;
+}
+
+void fn11(void)
+{
+    tmp = ACC;
+    OFLOW |= E803_neg(&STORE_CHAIN,&ACC);
+    STORE_CHAIN = tmp;
+}
+
+void fn12(void)
+{
+    tmp = ACC;
+    ACC = STORE_CHAIN;
+    STORE_CHAIN = tmp;
+    OFLOW |= E803_add(&E803_ONE,&ACC);
+}
+
+void fn13(void)
+{
+    tmp = ACC;
+    ACC = STORE_CHAIN;
+    STORE_CHAIN = tmp;
+    E803_and(&STORE_CHAIN,&ACC);
+}
+
+void fn14(void)
+{
+    tmp = ACC;
+    ACC = STORE_CHAIN;
+    STORE_CHAIN = tmp;
+    OFLOW |= E803_add(&STORE_CHAIN,&ACC);
+}
+
+void fn15(void)
+{
+    tmp = STORE_CHAIN;
+    STORE_CHAIN = ACC;
+    E803_sub(&tmp,&ACC);
+}
+
+void fn16(void)
+{
+    STORE_CHAIN = ACC;
+    ACC = E803_ZERO;
+}
+
+void fn17(void)
+{
+    tmp = STORE_CHAIN;;
+    STORE_CHAIN = ACC;
+    OFLOW |= E803_neg_add(&tmp,&ACC);
+}
+
+
+void fn20(void)
+{
+    STORE_CHAIN = ACC;
+}
+
+void fn21(void)
+{
+    OFLOW |= E803_neg(&ACC,&STORE_CHAIN);  
+}
+
+void fn22(void)
+{
+    OFLOW |= E803_add(&E803_ONE,&STORE_CHAIN); 
+}
+
+void fn23(void)
+{
+    E803_and(&ACC,&STORE_CHAIN); 
+}
+
+void fn24(void)
+{
+    OFLOW |= E803_add(&ACC,&STORE_CHAIN); 
+}
+
+void fn25(void)
+{
+    OFLOW |= E803_neg_add(&ACC,&STORE_CHAIN); 
+}
+
+void fn26(void)
+{
+    STORE_CHAIN = E803_ZERO;
+}
+
+void fn27(void)
+{
+    OFLOW |= E803_sub(&ACC,&STORE_CHAIN); 
+}
+
+
+void fn30(void)
+{
+    ACC = STORE_CHAIN;
+}
+
+void fn31(void)
+{
+    ACC = STORE_CHAIN;
+    OFLOW |= E803_neg(&STORE_CHAIN,&STORE_CHAIN);
+}
+
+void fn32(void)
+{
+    ACC = STORE_CHAIN;
+    OFLOW |= E803_add(&E803_ONE,&STORE_CHAIN);
+}
+
+void fn33(void)
+{
+    tmp = STORE_CHAIN;
+    E803_and(&ACC,&STORE_CHAIN);
+    ACC = tmp;
+}
+
+void fn34(void)
+{
+    tmp = STORE_CHAIN;
+    OFLOW |= E803_add(&ACC,&STORE_CHAIN);
+    ACC = tmp;
+}
+
+void fn35(void)
+{
+    tmp = STORE_CHAIN;
+    OFLOW |= E803_neg_add(&ACC,&STORE_CHAIN);
+    ACC = tmp;
+}
+
+void fn36(void)
+{
+    ACC = STORE_CHAIN;
+    STORE_CHAIN = E803_ZERO;
+}
+
+void fn37(void)
+{
+    tmp = STORE_CHAIN;
+    OFLOW |= E803_sub(&ACC,&STORE_CHAIN);
+    ACC = tmp;
+}
+
+
+
+void fn40(void)
+{
+
+}
+
+void fn41(void)
+{
+  
+
+}
+
+void fn42(void)
+{
+
+}
+
+void fn43(void)
+{
+
+}
+
+void fn44(void)
+{
+
+}
+
+void fn45(void)
+{
+
+}
+
+void fn46(void)
+{
+
+}
+
+void fn47(void)
+{
+
+}
+
+
+void fn50(void)
+{
+    if(!L)
+    {  /* First word */
+	L = true;
+	T = (IR & 127) - 1;
+    }
+
+    if(T--< 0)
+    { /* Last Word */
+	L = false;
+    }
+    else
+    {
+	E803_signed_shift_right(&ACC,&AR);
+    }
+}
+
+
+
+void fn51(void)
+{
+    if(!L)
+    {  /* First word */
+	L = true;
+	T = (IR & 127) - 1;
+    }
+
+    if(T--< 0)
+    { /* Last Word */
+	L = false;
+	AR = E803_ZERO;
+    }
+    else
+    {
+	E803_unsigned_shift_right(&ACC);
+    }
+
+}
+
+
+void fn52(void)
+{
+    int m,n,action;
+
+
+    if(!L)
+    {  /* First Word time */
+
+	L = true;
+	MREG = STORE_CHAIN;
+	E803_Double_M(&MREG);    /* shift one bit left so that M.bytes[0] &
+				    3 gives the action code */
+	E803_Acc_to_Q(&ACC,&QACC,&QAR);
+      
+	ACC = AR = E803_ZERO;
+	return;
+    }
+
+    action = MREG & 3;
+    switch(action)
+    {
+	case 0:   break;
+
+	case 1:   /* Add */
+	    OFLOW |= E803_dadd(&QACC,&QAR,&ACC,&AR);
+	    break;
+
+	case 2:   /* Subtract */
+	    OFLOW |= E803_dsub(&QACC,&QAR,&ACC,&AR);
+	    break;
+		
+	case 3:   break;
+    }
+
+    E803_shift_left(&QACC,&QAR);
+    n = E803_Shift_M_Right(&MREG);
+    m = (n >> 8) & 0xFF;
+    n = n & 0xFF;
+
+    if( (n == 0xFF) || (m == 0x00) )
+    {
+	L = false;
+    }
+}
+
+void fn53(void)
+{
+    int m,n,action;
+
+
+    if(!L)
+    {  /* First Word time */
+
+	L = true;
+	MREG = STORE_CHAIN;
+	E803_Double_M(&MREG);    /* shift one bit left so that M.bytes[0] &
+				    3 gives the action code */
+	E803_Acc_to_Q(&ACC,&QACC,&QAR);
+      
+	ACC = AR = E803_ZERO;
+	return;
+    }
+
+    if(LW)
+    {
+	L = LW = false;
+	OFLOW |= E803_dadd(&E803_ZERO,&E803_AR_MSB,&ACC,&AR);
+	AR = E803_ZERO;
+    }
+    else
+    {
+	action = MREG & 3;
+	switch(action)
+	{
+	    case 0:   break;
+		   
+	    case 1:   /* Add */
+		OFLOW |= E803_dadd(&QACC,&QAR,&ACC,&AR);
+		break;
+
+	    case 2:   /* Subtract */
+		OFLOW |= E803_dsub(&QACC,&QAR,&ACC,&AR);
+		break;
+		
+	    case 3:   break;
+	}
+
+	E803_shift_left(&QACC,&QAR);
+	n = E803_Shift_M_Right(&MREG);
+	m = (n >> 8) & 0xFF;
+	n = n & 0xFF;
+
+	if( (n == 0xFF) || (m == 0x00) )
+	{
+	    LW = true;
+	}
+    }
+}
+
+void fn54(void)
+{
+    if(!L)
+    {  /* First word */
+	L = true;
+	T = (IR & 127) - 1;
+    }
+
+    /* Note first and last words can be the same word for 0 bit shift */
+  
+    if(T-- < 0)
+    {   /* Last Word */
+	L = false;
+    }
+    else
+    {
+	OFLOW |= E803_shift_left(&ACC,&AR);
+    }
+}
+
+void fn55(void)
+{
+    if(!L)
+    {  /* First word */
+	L = true;
+	T = (IR & 127) - 1;
+	AR = E803_ZERO;   /* This is not quite what happens on a real 803.
+			     The AR should be cleared during LW, but clearing
+			     it here allows the use of the normal double
+			     length left shift function */
+    }
+
+    /* Note first and last words can be the same word for 0 bit shift */
+  
+    if(T-- < 0)
+    {   /* Last Word */
+	L = false;
+	AR = E803_ZERO;
+    }
+    else
+    {
+	OFLOW |= E803_shift_left(&ACC,&AR);
+    }
+}
+
+
+
+void fn56(void)
+{
+    static E803word M_sign;
+    E803word ACC_sign;
+
+    if(!L)
+    {  /* First Word time */
+	uint64_t *m,mm,n;
+
+    
+
+	L = true;
+	MREG = STORE_CHAIN;
+
+	/* Bug fixed 11/4/2010   The remainder needs an extra bit so
+	   MREG and ACC/AR are sign extended to 40 bits and special 
+	   versions of add and subtract are used.
+	   Oddly the listings of the DOS version from 1992 have 
+	   code to shift these values one place right. 
+	*/
+
+	m =  &MREG;
+	mm = n = *m;
+	n  &= 0x4000000000LL;   // Sign bit
+	mm &= 0x7FFFFFFFFFLL;   // 39 bits
+
+	n *= 6; // Two duplicate sign bits
+	*m =mm | n;
+	
+	m =  &ACC;
+	mm = n = *m;
+	n  &= 0x4000000000LL;   // Sign bit
+	mm &= 0x7FFFFFFFFFLL;   // 39 bits
+
+	n *= 6; // Two duplicate sign bits
+	*m =mm | n;
+	
+	M_sign = MREG;
+       
+	T = 40;   /* ? */
+
+	QAR = QACC = E803_ZERO;  /* Clear QAR so I can use the double
+				    length left shift on QACC */
+	/*printf("  ");       
+	  dumpACCAR();
+	  printf("\n");
+	*/
+	return;
+    }
+
+    ACC_sign = 0;
+   
+    if(T--)
+    {
+#if 0
+	if(traceChannel != NULL)
+	{
+	    g_string_truncate(traceText,0);	
+	    g_string_printf(traceText,"\n%s T=%d\nMREG=",__FUNCTION__,T);
+	    dumpWord(traceText,&MREG);
+	    g_string_append_printf(traceText,"\nACC =");
+	    dumpWord(traceText,&ACC);
+	    g_string_append_printf(traceText,"\nAR  =");
+	    dumpWord(traceText,&AR);
+	    g_string_append_printf(traceText,"\nQACC=");
+	    dumpWord(traceText,&QACC);
+      }
+#endif
+	if(T == 39)
+	{  /* Second word */
+	    ACC_sign = ACC;
+	}
+       
+	E803_shift_left(&QACC,&QAR);
+	if((ACC ^ M_sign) & 0x8000000000)
+	{  /* Signs different , so add */
+	    E803_add56(&MREG,&ACC);
+	}
+	else
+	{  /* Signs same, so subtract */
+	    E803_sub56(&MREG,&ACC);
+	    if(T != 39) QACC |= 1;
+	}
+#if 0
+	if(traceChannel != NULL)
+	{
+	  g_string_append_printf(traceText,"\nACC2=");
+	  dumpWord(traceText,&ACC);
+	  g_string_append_printf(traceText,"\nAR2 =");
+	  dumpWord(traceText,&AR);
+	  g_string_append_c(traceText, '\n');
+	  g_io_channel_write_chars(traceChannel,traceText->str,-1,NULL,NULL);	  
+	}
+#endif
+
+	if(T == 39)
+	{
+	    if(( (ACC ^ ACC_sign) & 0x8000000000) == 0)
+	    {
+		OFLOW |= true;
+	    }
+	}
+	E803_shift_left56(&ACC,&AR);
+    }
+    else
+    {   /* Last word */
+	ACC = QACC;
+	AR = E803_ZERO;
+	L = false;
+    }
+}
+
+// 6/3/10  BUG FIXED.  Fn 57 does NOT clear the AR as it is not 
+// a long instruction so LW is not up.
+void fn57(void)
+{
+    E803_AR_to_ACC(&ACC,&AR);
+    //    AR = E803_ZERO;
+}
+
+
+
+/* NOTE on Gp 6 timings.
+   Although on the real machine Gp 6 functions carry on into the the
+   next instructions R & RBAR times (to complete standardising shift),
+   for the emulation everything has to be completed before L is reset.
+*/
+
+
+/*
+
+803 floating point format numbers
+
+E803word.bytes[]       4	3	 2	 1	  0
+SMMMMMMM MMMMMMMM MMMMMMMM MMMMMMmE EEEEEEEE
+	           
+S = replicated Sign bit
+M = Mantissa    m = 2^-29  LSB of Mantisa
+E = Exponent
+
+Separated Mantissae are held as...
+E803word.bytes[]       4	 3	 2	   1	    0
+SSMMMMMM MMMMMMMM MMMMMMMM MMMMMMMm nn000000
+
+n = extra mantisa bits held during calculations
+*/
+
+
+
+
+
+static void fn6X(int FN)
+{
+    int ACCexp,STOREexp,diff,negdiff,RightShift,LeftShift,NED,NED16,NEDBAR16,K;
+    int oflw,round;
+    E803word ACCmant,STOREmant,VDin,TMPmant;
+  
+    if(!L)
+    {  /* First Word time */
+	L = true;
+	round = 0;
+
+	if(FN != 062)
+	{
+	    ACCexp   = E803_fp_split(&ACC,&ACCmant);
+	    STOREexp = E803_fp_split(&STORE_CHAIN,&STOREmant);
+	}
+	else
+	{
+	    /* Just reverse the input parameters */
+	    ACCexp   = E803_fp_split(&STORE_CHAIN,&ACCmant);
+	    STOREexp = E803_fp_split(&ACC,&STOREmant);
+	}
+/*
+	if(trace != NULL)
+	{
+	    fprintf(trace,"ACCexp=%d ACCmant=",ACCexp);
+	    dumpWordFile(trace,&ACCmant);
+	    fprintf(trace," STOREexp=%d STOREmant=",STOREexp);
+	    dumpWordFile(trace,&STOREmant);
+	    fprintf(trace,"\n");
+	}
+*/
+	K = NED = NED16 = NEDBAR16 = false;
+
+	diff    = ACCexp - STOREexp;
+	negdiff = STOREexp - ACCexp;
+
+	if(diff < 0) NED = true;
+       
+	RightShift = 0;
+       
+	if(diff & 0x1E0)
+	{
+	    NED16 = true;
+	    RightShift = 32 - ( diff & 0x1F );
+	}
+
+	if(negdiff & 0x1E0)
+	{
+	    NEDBAR16 = true;
+	    RightShift = 32 - ( negdiff & 0x1F );
+	}
+
+	if(NED16 && NEDBAR16) RightShift = 32;
+
+	if(NED)
+	{
+	    VDin = ACCmant;
+	    ACCexp = STOREexp;
+	}
+	else
+	{
+	    VDin = STOREmant;
+	}
+	/* Since Add only keeps one extra significant bit, test bottom
+	   7 for rounding bits */
+	if(RightShift) round |= E803_mant_shift_right(&VDin,RightShift,7);
+
+	if(NED)
+	{
+	    ACCmant = VDin;
+	}
+	else
+	{
+	    STOREmant = VDin;
+	}
+
+	if(FN == 060)
+	{
+/*	    if(trace != NULL)
+	    {
+		fprintf(trace,"FN60 before STOREmant=");
+		dumpWordFile(trace,&STOREmant);
+		fprintf(trace," ACCmant=");
+		dumpWordFile(trace,&ACCmant);
+		fprintf(trace,"\n");
+	    }
+*/
+	    oflw = E803_mant_add(&STOREmant,&ACCmant);
+/*
+	    if(trace != NULL)
+	    {
+		fprintf(trace,"FN60 after  STOREmant=");
+		dumpWordFile(trace,&STOREmant);
+		fprintf(trace," ACCmant=");
+		dumpWordFile(trace,&ACCmant);
+		fprintf(trace," oflw=%d\n",oflw);
+	    }
+*/
+	}
+	else
+	{
+	    oflw = E803_mant_sub(&STOREmant,&ACCmant);
+	}
+
+	LeftShift = 0;
+	if( oflw )
+	{   /* The mant overflowed */
+	    K = true;
+	}
+	else
+	{   /* No overflow, so we may need to standardise */
+	    /* May need to check for zero here too */
+
+	    TMPmant = ACCmant;
+	    if(E803_mant_shift_right(&TMPmant,31,7) == 0)
+	    {
+		ACCexp = 0;
+		ACCmant = E803_ZERO;
+	    }
+	    else
+	    {
+		while( !oflw )
+		{
+		    TMPmant = ACCmant;
+		    oflw = E803_mant_add(&TMPmant,&ACCmant);
+		    LeftShift += 1;
+		}
+		LeftShift -= 1;
+		ACCmant = TMPmant;
+	    }
+	}
+
+	if(K)
+	{
+	    RightShift = 1;
+	    round |= E803_mant_shift_right(&ACCmant,RightShift,7);
+	    ACCexp += 1;
+	}
+
+	ACCexp -= LeftShift;
+       
+	if(ACCexp < 0)
+	{
+	    /* Exp underflow !! */
+	    ACCexp = 0;
+	    ACCmant = E803_ZERO;
+	}
+
+	if(ACCexp > 511)
+	{
+	    printf("********** FPO fn6X Exp Ovfl ***********\n");
+	    S = true;
+	    FPO = true;
+	}
+
+	if( ACCmant & 0x80) round = 1;
+       
+	if(round)
+	{   /* Force the rounding bit */
+	    ACCmant |= 0x100;
+	}
+/*
+	if(trace != NULL)
+	{
+	    fprintf(trace,"PreJoin  ACCmant=");
+	    dumpWordFile(trace,&ACCmant);
+	    fprintf(trace," ACCexp%d\n",ACCexp);
+	}
+*/
+	E803_fp_join(&ACCmant,&ACCexp,&ACC);
+/*
+	if(trace != NULL)
+	{
+	    fprintf(trace,"PostJoin ACC    =");
+	    dumpWordFile(trace,&ACC);
+	    fprintf(trace,"\n");
+	}
+*/
+    }
+    else
+    {  /* Second word time */
+	L = false;
+	AR = E803_ZERO;
+    }
+    return;
+}
+
+void fn60(void)
+{
+    fn6X(060);
+}
+
+void fn61(void)
+{
+    fn6X(061);
+}
+
+void fn62(void)
+{
+    fn6X(062);
+}
+
+
+void fn63(void)
+{
+    int ACCexp,STOREexp,op,oflw,LeftShift;
+    E803word TMPmant;
+    static E803word ACCmant;
+    static int round; 
+ 
+    
+    if(!L)
+    {  /* First Word time */
+	L = true;
+	T = 16 ; /* ? */
+	round = 0;
+
+	ACCexp = E803_fp_split(&ACC,&ACCmant);
+
+	/* Multiplier mantissa to MREG */
+	STOREexp = E803_fp_split(&STORE_CHAIN,&MREG);
+
+	EXPREG = ACCexp + STOREexp;
+      
+	MANTREG = E803_ZERO;
+
+
+
+    }
+
+    op = (*((int *) &MREG) >> 7) & 0x7;
+  
+    round += E803_mant_shift_right(&MANTREG,2,6);  /* Note 2 extra bits */  
+    switch(op)
+    {
+
+	case 0:
+	    break;
+	case 1:
+	case 2:
+	    E803_mant_add(&ACCmant,&MANTREG);
+	    break;
+	case 3:
+	    E803_mant_add(&ACCmant,&MANTREG);
+	    E803_mant_add(&ACCmant,&MANTREG);
+	    break;
+	    
+	case 4:
+	    E803_mant_sub(&ACCmant,&MANTREG);
+	    E803_mant_sub(&ACCmant,&MANTREG);
+	    break;
+	case 5:
+	case 6:
+	    E803_mant_sub(&ACCmant,&MANTREG);
+	    break;
+	case 7:
+	    break;
+    }
+
+    E803_mant_shift_right(&MREG,2,1);
+
+    T -= 1;
+    if( T == 1)
+    {  /* This is the word time when "end" is set */
+	MREG = E803_ZERO;
+    }
+
+    if(T == 0)
+    {  /* This is the AS & FR & SD word times combined */
+      
+	L = 0;
+	oflw = 0;
+	LeftShift = 0;
+	TMPmant = MANTREG;
+	if(E803_mant_shift_right(&TMPmant,31,7) == 0)
+	{
+	    ACCexp = 0;
+	    ACCmant = E803_ZERO; 	
+	    /* Bug fixed 27/3/05   Multiply by zero was NOT giving zero result!
+	       The next to lines were needed */
+	    EXPREG = 0;
+	    MANTREG = E803_ZERO;
+	}
+	else
+	{
+	    while( !oflw )
+	    {
+		TMPmant = MANTREG;
+		oflw = E803_mant_add(&TMPmant,&MANTREG);
+		LeftShift += 1;
+	    }
+	    LeftShift -= 1;
+	    MANTREG = TMPmant;
+  
+	    EXPREG -= (255 + LeftShift);
+
+	    if(EXPREG < 0)
+	    {
+		/* Exp underflow !! */
+		EXPREG = 0;
+		MANTREG = E803_ZERO;
+		round = 0;
+	    }
+       
+	    if(EXPREG > 511)
+	    {
+		printf("**********FPO  Fn63 Exp Ovfw ***********\n");
+	    }
+      
+	    /* Do I need to check the MANTREG for bits which should set
+	       round ?   I think I do.... */
+
+	    TMPmant = MANTREG;
+	    round |= E803_mant_shift_right(&TMPmant,2,6);
+      
+	    if(round)
+	    {   /* Force the rounding bit */
+		MANTREG |= 0x100;
+	    }
+	}
+
+	E803_fp_join(&MANTREG,&EXPREG,&ACC);
+	AR = E803_ZERO;
+    }
+    return;
+}
+
+  
+//#define DIV_CNT 31
+
+void fn64(void)
+{
+    static E803word TBIT =  0x1000000000; //   { .bytes={ 0,0,0,0,0x10,0,0,0}};  /* This may be wrong */
+    static E803word TsignBit = 0xE000000000; //{ .bytes={ 0,0,0,0,0xE0,0,0,0}};
+    static E803word TshiftBit,TBit;
+    static E803word ACCmant;
+    int MantZ,Same,oflw,LeftShift,STOREexp,ACCexp;
+    static int firstbit,exact;
+    E803word TMPmant;
+    bool DivByZero;
+
+    if(!L)
+    {
+	/* First word time */
+	TBit = E803_ZERO;     /* To ignore the first bit in the answer */
+	TshiftBit = TBIT;
+	firstbit = true;
+	T = 0;   /* 31 bits of quotient to form */
+	L = true;
+	
+	exact = false;
+       
+	/* divisor  mantissa from store  to MREG */
+	STOREexp = E803_fp_split(&STORE_CHAIN,&MREG);
+
+	/* Split the dividend */
+	ACCexp = E803_fp_split(&ACC,&ACCmant);
+
+	EXPREG = ACCexp - STOREexp;
+      
+	MANTREG = E803_ZERO;   /* Form result in here */
+	QACC = E803_ZERO;
+      
+	E803_mant_shift_right(&ACCmant,1,1); 
+
+	//DivByZero = (STORE_CHAIN.bytes[0] | STORE_CHAIN.bytes[1] | 
+	//	     STORE_CHAIN.bytes[2] | STORE_CHAIN.bytes[3] |
+	//	     STORE_CHAIN.bytes[4]) ? false : true;
+	DivByZero = (STORE_CHAIN != 0)  ? false : true;
+	
+	if(DivByZero)
+	{
+	    //printf("********** FPO fn64 DivByZero ***********\n");
+	    S = true;
+	    FPO = true;
+	}
+
+    }
+    else
+    {
+	Same = !((ACCmant ^ MREG) & 0x8000000000);
+	MantZ = (ACCmant != 0) ? false : true;
+
+	if(MantZ) exact = true;
+
+	if(MantZ || Same)
+	{
+	    E803_mant_sub(&MREG,&ACCmant);
+	    E803_mant_add(&TBit,&MANTREG);
+	}
+	else
+	{
+	    E803_mant_add(&MREG,&ACCmant);
+	}
+       
+	E803_mant_add(&ACCmant,&ACCmant);
+
+	if(firstbit)
+	{
+	    TBit = TsignBit;
+	    firstbit = false;
+	}
+	else
+	{
+	    TBit = TshiftBit;
+	    E803_mant_shift_right(&TshiftBit,1,1);
+	}
+
+	T += 1;
+
+	if( (T == 32) || (MantZ))
+	{
+
+	    L = 0;
+
+	    oflw = 0;
+	    LeftShift = 0;
+
+	    MantZ = (MANTREG != 0) ? false : true;
+
+	    if(MantZ)
+	    {
+		EXPREG = 0;
+		exact = true;
+	    }
+	    else
+	    {
+	   
+		TMPmant = MANTREG;
+		while( !oflw )
+		{
+		    TMPmant = MANTREG;
+		    oflw = E803_mant_add(&TMPmant,&MANTREG);
+
+		    if(!oflw) LeftShift += 1;
+		}
+		MANTREG = TMPmant;
+		EXPREG += (257 - LeftShift);
+	    }
+
+	    if(!exact)
+	    {   /* Force the rounding bit */
+		MANTREG |= 0x100;
+	    }
+       
+	    if(EXPREG < 0)
+	    {
+		/* Exp underflow !! */
+		EXPREG = 0;
+		MANTREG = E803_ZERO;
+	    }
+     	    if(EXPREG > 511)
+	    {
+		printf("********** FPO Fn64 Exp Oflw ***********\n");
+		S = true;
+		FPO = true;
+	    }  
+	    E803_fp_join(&MANTREG,&EXPREG,&ACC);
+	    AR = E803_ZERO;
+	}
+    }
+}
+
+
+void fn65(void)
+{
+    int count,EXP,oflw,*ip;
+    E803word temp;
+
+    if((IR & 8191) < 4096)
+    {   /* Shift */
+      count = IR & 63;
+      //count = IR & 0x2F;   // Fault on TNMOC's 803 on 4/4/2010
+
+	if(count == 0) return;
+      
+	if(count <= 39)
+	{
+	    E803_rotate_left(&ACC,&count);
+	}
+	else
+	{
+	    count -= 39;
+	    E803_shift_left_F65(&ACC,&count);
+	}
+    }
+    else
+    {   /* Fp standardisation */
+	AR = E803_ZERO;
+
+	EXP = (ACC != 0) ? false : true;
+	if(EXP) return;
+      
+	oflw = false;
+      
+	EXP = 256+38;
+      
+	while(1)
+	{
+	    temp = ACC;
+	    oflw = E803_shift_left(&ACC,&AR);
+	    if(oflw) break;
+	
+	    EXP -= 1;
+	}
+
+	ACC = temp;
+	ip = (int *) &ACC;
+      
+	if(*ip & 511) *ip |= 512;
+      
+	*ip &= ~511;
+	*ip |= (EXP & 511);
+    }
+}
+
+void fn66(void)
+{
+  
+}
+
+void fn67(void)
+{
+
+}
+
+
+// Some static stubs until the PTS is implemented
+static int ptsTestReady(__attribute__((unused)) int fn,__attribute__((unused)) int address)
+{
+    return(0);
+}
+
+static void ptsSetACT(__attribute__((unused)) int Fn,__attribute__((unused)) int address)
+{
+
+}
+
+static E803word readTRlines(void)
+{
+  return(0);
+}
+
+
+
+void fn70(void)
+{
+
+    WI = B = (WG_ControlButtons & WG_manual_data) ? true : false;
+  
+    if(B) 
+    {
+	if(SS3)
+	{
+	    B = false;
+	    WI = false;
+	    SS3 = false;
+	    ACC = WG;
+#if 0
+	    g_string_truncate(traceText,0);	
+	    g_string_append_printf(traceText,"\nWG =");
+	    traceText = dumpWord(traceText,&WG);
+	    printf("%s\n",traceText->str);
+	    printf("%p %p %p\n",&ACC,&ACC.word,&ACC.bytes);
+#endif
+	}
+    }
+    else
+    {
+	B = false;
+	WI = false;
+	SS3 = false;
+	ACC = WG;
+    }
+}
+
+/*
+void reader1CharBufferSave(char ch)
+{
+    reader1CharBuffer[reader1CharBufferWrite++] = ch;
+    reader1CharBufferWrite &= 0xFF;
+}
+*/
+
+//extern int ptsTestReady(int fn,int address);
+//extern int plotterTestReady(int fn,int address);
+//extern int readTRlines(void);
+//extern void setClines(int n); 
+//extern void ptsSetACT(int fn,int address);
+//extern void plotterSetACT(int fn,int address);
+static int Blines;
+static uint8_t Clines;
+// TODO add F75
+//enum IOINSTR {F71,F72,F74,F75,F76,F77};
+
+
+static uint8_t getClines(void)
+{
+    return Clines;
+}
+
+
+static int testReady(int fn,int address)
+{
+  int ready = false;
+
+  switch(fn)
+  {
+  case F72:
+    if(address == 7168)
+//      ready |= plotterTestReady(fn,address);
+    if(address == 512)
+      ready |= true;
+   if(address == 1024)
+      ready |= true;
+   if(address == 1536)
+      ready |= true;
+
+
+    break;
+
+  case F71:
+  case F74:
+      ready |= ptsTestReady(fn,address);
+    break;
+
+  case F75:
+
+    if(address == 1027)
+    {
+#if FILM
+      ready |= filmControllerReady(fn,address);
+#endif
+    }
+    else if(address & 2048) {
+	ready = true;
+    }
+    else
+    {
+      ready = false;
+      printf("%s FN75 %d (0x%02x)\n",__FUNCTION__,address,address);
+    }
+    break;
+  case F76:
+#if FILM
+    ready |= filmControllerReady(fn,address);
+#endif
+    break;
+
+  default:
+    printf("%s instruction not implelemnted\n",__FUNCTION__);
+    break;
+  }
+  return(ready);
+}
+
+static void setACT(int fn,int address)
+{
+    switch(fn)
+    {
+    case F72:
+	if(address == 7168)
+//	    plotterSetACT(fn,address);
+	if(address == 512)
+	    printf("FN72 512 + %d\n",IR & 63);
+	if(address == 1024)
+	    printf("FN72 1024 + %d\n",IR & 63);
+	if(address == 1536)
+	    printf("FN72 1536 + %d\n",IR & 63);
+	break;
+
+    case F71:
+    case F74:
+	ptsSetACT(fn,address);
+	break;
+
+    case F75:
+	if(address == 1027)
+	{
+#if FILM
+	    filmControllerSetACT(fn,address);
+#endif
+	}
+	else if(address & 2048)
+	{
+#if 0
+	    struct tm *now;
+	    time_t seconds;
+	    static unsigned long ulseconds;
+	    static int h,m,s;
+	    
+	    switch(address & 0x7)
+	    {
+	    case 0:
+
+		seconds = time(NULL);
+		ulseconds = (unsigned long) seconds;
+		now = gmtime(&seconds);
+		h = now->tm_hour;
+		m = now->tm_min;
+		s = now->tm_sec;
+		Blines = 0;
+		break;
+	    case 1:
+		Blines = h;
+		break;
+	    case 2:
+		Blines = m;
+		break;
+	    case 3:
+		Blines = s;
+		break;
+	    case 4:
+		Blines = ulseconds & 0x1FFF;
+		break;
+	    case 5:
+		Blines = (ulseconds >> 13) & 0x1FFF;
+		break;
+	    case 6:
+		Blines = (ulseconds >> 26) & 0x1FFF;
+		break;
+	    }
+	
+#endif	    
+	}
+	else
+	{
+	    printf("F75 with address = %d\n",address);
+	}
+	break;
+
+    case F76:
+#if FILM
+	filmControllerSetACT(fn,address);
+#endif
+	break;
+
+    default:
+	printf("%s instruction not implelemnted\n",__FUNCTION__);
+	break;
+    }
+
+    return;
+}
+
+
+void fn71(void)
+{
+  if(testReady(F71,IR&2048))
+  {
+    setACT(F71,IR&2048);
+    ACC |= readTRlines();
+    if(B)
+    {
+      B = false;
+    }
+
+  }
+  else
+  {
+    B = true;
+  }
+
+  return;
+}    
+
+
+
+#if 0
+	if(!reader1Mode)
+	{
+		/* Normal GUI reader */
+		if( reader1Act && (reader_tape_motion(1,0) == 1))
+		{   
+			/* char in the buffer so ACT.  Now use the
+	       tape_micro_position to find the character to read */
+			B = false;
+			PTS_Busy = false;
+			ACC.bytes[0] |= (ch = Reader_tape_buffer[0][Reader_tape_micro_position[0] / 7] & 0x1F);
+
+			/* make the reader go busy near end of tape */
+			if(((Reader_tape_micro_position[0] / 7) + 7) >  Reader_tape_buffer_size[0])
+			{
+				reader1Act = false;
+				reader1EOT = true;
+			}
+		}
+		else
+		{  /* No char available */
+			B = true;
+			PTS_Busy = true;
+		}
+	}
+	else
+	{
+		/* Use the real reader.  Still check reader1Act to allow virtual 
+	   PTS manual button to work as expected */	
+		if(!reader1Act)
+		{
+			B = true;
+			PTS_Busy = true;
+		}
+		else
+		{
+			if(reader1CharBufferRead != reader1CharBufferWrite)
+			{
+				B = false;
+				PTS_Busy = false;
+				//printf("F71 read %02X\n",reader1CharBuffer[reader1CharBufferRead] & 0x1F);
+				ACC.bytes[0] |= reader1CharBuffer[reader1CharBufferRead++] & 0x1F;
+				reader1CharBufferRead &= 0xFF;
+				write(reader_fd,"R",1);
+				tcdrain(reader_fd);
+			}
+			else
+			{
+				doExternalDeviceFSM(FUNC71);
+				B = true;
+				PTS_Busy = true;
+			}
+		}
+	}
+#endif
+  
+
+
+
+int plotterAct = 0;
+
+void fn72(void)
+{
+
+  if(testReady(F72,IR&7680))
+  {
+//    Clines = (IR&0x3F);
+    setACT(F72,IR&7680);
+    if(B)
+    {
+      B = false;
+    }
+
+  }
+  else
+  {
+    B = true;
+  }
+}
+
+
+#if 0
+    unsigned char  bits;
+
+    if(CalcompBusy || !plotterAct)
+    {
+	B = true;
+    }
+    else
+    {
+	CalcompBusy = true;
+	bits = IR  & 0x3F;
+	if( (bits & 0x30) == 0)
+	{
+	    start_timer(&CalcompBusy,0.003);
+	}
+	else
+	{
+	    start_timer(&CalcompBusy,0.1);
+	}
+	B = false;
+	   
+	bits = IR  & 0x3F;
+	plotterMessage[plotter_moves++] = '@' +  bits;
+    }
+}
+#endif
+void fn73(void)
+{
+    E803_SCR_to_STORE(&SCR,&STORE_CHAIN);
+}
+
+/* Speed is now controlled using the polling techniques developed 
+   for the film controler.
+*/
+
+int F74punchAt;
+
+void fn74(void)
+{
+
+  if(testReady(F74,IR&6144))
+  {
+    Clines = (IR&0x1F);
+    setACT(F74,IR&6144);
+    if(B)
+    {
+      B = false;
+    }
+
+  }
+  else
+  {
+    B = true;
+  }
+}
+
+
+
+
+#if 0
+    char line[100];
+
+    if( (F74Ready) && (CPU_word_time_count >= F74punchAt))
+    {  /* We got a reply.  Note this is the Ready & Act rolled into one ! */
+	F74Ready = false;
+	B = false;
+	PTS_Busy = false;
+    }
+    else
+    {
+	if(!B)
+	{
+	    /* Go busy and send the F74 message */
+	    B = true;
+	    PTS_Busy = true;
+
+//	    sprintf(line,"F74 %ld %d\n",IR & 8191,CPU_word_time_count);
+//	    notifyV2(PTS,line);
+	    // TODO printfMessageToClients(eventClients[PTS],"F74 %ld %d\n",IR & 8191,CPU_word_time_count);
+	  
+	    doExternalDeviceFSM(FUNC71);  
+	}
+    }
+#endif
+#if 0
+    switch(device)
+    {
+	case 0:// Channel 1
+	    if(channel1Act && !channel1timer)
+	    {
+		B = false;
+		PTS_Busy = false;
+		channelBuffer[channelCharsPunched++] = 0x40 | (IR & 0x1F);
+		channel1timer = true;
+		start_timer(&channel1timer,channel1charTime);
+		return;
+	    }
+	    break;
+	case 1:
+	     if(channel2Act && !channel2timer)
+	    {
+		B = false;
+		PTS_Busy = false;
+		channelBuffer[channelCharsPunched++] = 0x80 | (IR & 0x1F);
+		channel2timer = true;
+		start_timer(&channel2timer,channel2charTime);
+		return;
+	    }
+	    break;
+	case 2: 
+	    if(channel3Act && !channel3timer)
+	    {
+		B = false;
+		PTS_Busy = false;
+		channelBuffer[channelCharsPunched++] = 0xC0 | (IR & 0x1F);
+		channel3timer = true;
+		start_timer(&channel3timer,channel3charTime);
+		return;
+	    }
+	    break;
+	case 3:
+	    break;
+    }
+
+    if(!B)
+    {
+	switch(device)
+	{
+	    case 0:
+		if(!channel1timer) channel1GoneBusy = true;
+		break;
+	    case 1:
+		if(!channel2timer) channel2GoneBusy = true;
+		break;
+	    case 2:
+		if(!channel3timer) channel3GoneBusy = true;
+		break;
+	}
+	PTS_Busy = true;
+	B = true;
+    }
+#endif
+
+
+
+
+/* 
+07/10/05 Started to work on film instructions 
+22/10/05 Trying to use messages to the film controler for F76 rather than 
+having copy of handler control words held in the CPU.  This seems to work 
+OK and now I'll be using the same technique for PTS as well  
+*/
+ 
+/*
+F75 address decode
+1027 FILM read last block address read or written
+2048 TIMER read timer
+*/
+
+
+
+int FILM_POWER_ON = false;
+int filmControllerLastBlock = 0;
+
+void fn75(void)
+{
+#if 0
+    time_t now;
+    time(&now);
+
+    ACC.bytes[0] = (uint8_t) now & 0xFF;
+    ACC.bytes[1] = (uint8_t) (now >> 8) & 0xFF;
+    ACC.bytes[2] = (uint8_t) (now >> 16) & 0xFF;
+    ACC.bytes[3] = (uint8_t) (now >> 24) & 0xFF;
+    ACC.bytes[4] = (uint8_t) (now >> 32) & 0xFF;
+#endif
+}
+
+#if 0
+  if(testReady(F75,IR&8191))
+  {
+    setACT(F75,IR&8191);
+    //readBlines();
+    ACC = E803_ZERO;
+    ACC.bytes[0] = Blines & 0xFF;
+    ACC.bytes[1] = (Blines >> 8) & 0x1F;
+
+    if(B)
+    {
+      B = false;
+    }
+  }
+  else
+  {
+    B = true;
+  }
+}
+#endif
+#if 0
+void fn75old(void)
+{
+    char line[100];
+    int address;
+    struct tm *now;
+    time_t seconds;
+    static int h,m,s;
+
+    if(F75Ready)
+    {  /* We got a reply.  Note this is the Ready & Act rolled into one ! */
+	ACC = E803_ZERO;
+	ACC.bytes[0] = ACC_INPUTS & 0xFF;
+	ACC.bytes[1] = (ACC_INPUTS >> 8) & 0x1F;
+
+	F75Ready = false;
+	B = false;
+    }
+    else
+    {
+	if(!B)
+	{
+
+	  address = IR & 8191;
+
+	  
+
+	  if(address & 2048)
+	  {
+	      struct tm *now;
+	      time_t seconds;
+	      static int h,m,s;
+	      switch(address & 0x3)
+	      {
+	      case 0:
+
+		  seconds = time(NULL);
+	      now = gmtime(&seconds);
+	      h = now->tm_hour;
+	      m = now->tm_min;
+	      s = now->tm_sec;
+
+
+	      ACC_INPUTS = 0;
+	      break;
+	    case 1:
+	      ACC_INPUTS = h;
+	      break;
+	    case 2:
+	      ACC_INPUTS = m;
+	      break;
+	    case 3:
+	      ACC_INPUTS = s;
+	      break;
+	    }
+	    B = true;
+	    F75Ready = true;
+	  }
+	  else
+	  {
+
+	    /* Go busy and send the F75 message */
+	    B = true;
+	    
+	    sprintf(line,"F75 %ld\n",IR & 8191);
+	    notifyV2(F75,line);
+	  
+	    doExternalDeviceFSM(FUNC71);
+	  }  
+	}
+    }
+}
+#endif
+
+/*
+extern int filmHandlerControlWords[5];
+#define HANDLER_MANUAL 1
+#define HANDLER_WRITE_PERMIT 4
+#define HANDLER_SEARCHING 8
+*/
+
+
+
+void fn76(void)
+{
+  if(testReady(F76,IR&8191))
+  {
+    setACT(F76,IR&8191);
+    //readBlines();
+    ACC = E803_ZERO;
+    ACC = Blines & 0x1FFF;
+    if(B)
+    {
+      B = false;
+    }
+  }
+  else
+  {
+    B = true;
+  }
+}
+
+
+
+
+/* New version that uses the externalDeviceFSM.
+   Since this works OK it opens up all sorts of possibilities.  
+   For ALL peripheral READY/ACT can be done this way ! 
+   F76 can poll the film controller at full speed ! 
+*/
+#if 0
+void fn76old(void)
+{
+    char line[100];
+    /* I would normally avoid sending messages from within the emulate loop.... but it 
+       seems to work OK !... */
+
+//    printf("F76 %d\n",F76Ready);
+
+    if(F76Ready)
+    {  /* We got a reply.  Note this is the Ready & Act rolled into one ! */
+	ACC = E803_ZERO;
+	ACC.bytes[0] = ACC_INPUTS & 255;
+	ACC.bytes[1] = (ACC_INPUTS >> 8) & 255;
+
+	F76Ready = false;
+	B = false;
+    }
+    else
+    {
+	if(!B)
+	{
+	    /* Go busy and send the F76 message */
+	    B = true;
+	    
+	    sprintf(line,"F76 %ld\n",IR & 8191);
+	    notifyV2(F76,line);
+
+	    doExternalDeviceFSM(FUNC71);  
+	}
+    }
+}
+#endif
+
+
+uint8_t storeBuffer[64*5];
+
+static uint8_t *TransferAndFinish(__attribute__((unused)) bool Transfer,
+				  __attribute__((unused))bool Finish,
+				  __attribute__((unused))int count,
+				  __attribute__((unused))uint8_t *data)
+{
+    // Needs serious reworking
+    return(0);
+#if 0    
+  uint8_t *dataOut;
+  uint8_t *pointer;
+  int wordNo,byteNo,F77Address;
+
+  dataOut = NULL;
+  if(Transfer && Finish && (count == 0 ) && (data == NULL))
+  {
+    // Search 
+    F77Finish = true;
+
+  }
+
+
+  if(Transfer &&  (count != 0) && (data != NULL))
+  {
+    // Read  (data from Film Controler)
+
+    pointer = data;
+
+    	for(wordNo = 0; wordNo < 8; wordNo += 1)
+	{
+	    for(byteNo = 0; byteNo < 5; byteNo += 1)
+	    {
+		STORE_CHAIN.bytes[byteNo] = (uint8_t) (*pointer++ & 0xFF);
+	    }
+
+	    F77Address = IR & 8191;
+	    /* You can't overwrite the initial instructions !*/
+	    if(F77Address > 3)
+	      {
+		  //hash(F77Address,STORE_CHAIN);
+#if 0
+		guchar b1,b2,b3,*ptr,*ptr1;
+		b1 =  STORE_CHAIN.bytes[0];
+		b2 =  STORE_CHAIN.bytes[1];
+		b3 =  STORE_CHAIN.bytes[2];
+
+		ptr = ptr1 = &rgbbuf[((F77Address % 64) * 6) + ((F77Address / 64) * 6 * IMAGE_WIDTH)];
+
+		*ptr++ = b1; *ptr++ = b2; *ptr++ = b3;
+		*ptr++ = b1; *ptr++ = b2; *ptr++ = b3;
+
+		ptr1 += IMAGE_WIDTH * 3;
+
+		*ptr1++ = b1; *ptr1++ = b2; *ptr1++ = b3;
+		*ptr1++ = b1; *ptr1++ = b2; *ptr1++ = b3;
+#endif
+
+		CoreStore[F77Address] = STORE_CHAIN;
+	    }
+	    IR += 1;
+	}
+
+
+	if(Finish)
+	{
+	  F77Finish = true;
+	  IR -= 1;
+	}
+  }
+
+  if(Transfer  && (count != 0) && (data == NULL))
+  {
+    pointer = storeBuffer;
+    // Write  (data to Film Controler)
+    for(wordNo = 0; wordNo < 8; wordNo += 1)
+    {
+
+
+      F77Address = IR & 8191;
+      /* The initial instructions read as zeros !*/
+      if(F77Address > 3)
+      {	    
+	STORE_CHAIN = CoreStore[F77Address];
+      }
+      else
+      {
+	STORE_CHAIN = E803_ZERO;
+      }
+      for(byteNo = 0; byteNo < 5; byteNo += 1)
+      {
+	*pointer++ = STORE_CHAIN.bytes[byteNo] & 0xFF;
+      }
+	
+      IR += 1;
+    }
+    if(Finish)
+    {
+      F77Finish = true;
+      IR -= 1;
+    }
+    dataOut = storeBuffer;
+	
+  }
+
+
+  return(dataOut);
+  #endif
+}
+
+void fn77(void)
+{
+    // Needs serious reworking
+    L = true;
+#if 0
+    int FW;
+
+    ST = true;
+    FW = ST && !L;
+
+    if(FW) 
+    {
+	L = true;
+	ADDRESS_COUNT = 0;
+    }
+
+    if(ST && FW) 
+    {   /* First Word Time */
+	LP = true;
+
+#if FILM	  
+	FChandleF77(IR&8191);
+#endif  
+	//	sprintf(line,"F77 %ld\n",IR & 8191);
+	//notifyV2(F77,line);
+
+	//doExternalDeviceFSM(FUNC71);  
+    }
+
+    if(LP && F77Finish)
+    {
+      //if(ADDRESS_COUNT != 0) IR -= 1;
+	LP = false;
+	F77Finish = false;
+    }
+
+    if(!LP && !FW) L = false;
+
+    if(ST) FW = false;
+    #endif
+}
+
+
+
+static void cpuPowerOn(__attribute__((unused)) unsigned int dummy)
+{
+
+    printf("%s called\n",__FUNCTION__);
+    CpuRunning = true;
+    S = PARITY = true;
+    wiring(UPDATE_DISPLAYS,0);
+
+}
+
+static void cpuPowerOff(__attribute__((unused)) unsigned int dummy)
+{
+    CpuRunning = false;
+    PARITY = false;
+    wiring(UPDATE_DISPLAYS,0);
+
+}
+
+#if 1
+static
+void dumpWord(E803word word)
+{
+    unsigned int f1,n1,b,f2,n2;
+    
+    f1 = (word >> 33) & 077;
+    n1 = (word >> 20) & 017777;
+    b =  (word >> 19) & 01;
+    f2 = (word >> 13) & 077;
+    n2 = word & 017777;
+
+    printf("%02o %4d%c%02o %4d\n",f1,n1,b?'/':':',f2,n2);
+    
+}
+#endif
+
+const char *T1[4] = {"264:060","224/163","555:710","431:402"};
+
+
+// Called from CpuInit
+void StartEmulate(char *coreImage)
+{
+    connectWires(SUPPLIES_ON,cpuPowerOn);
+    connectWires(SUPPLIES_OFF,cpuPowerOff);
+    uint64_t f1,n1,f2,n2,bbit;
+    char b;
+    E803word II;
+    int n;
+
+    if(coreImage == NULL)
+    {
+	CoreStore = (E803word *) calloc(8194,sizeof(E803word));  //8194 ???
+    }
+    else
+    {
+	CoreStore = (E803word *) coreImage;
+    }
+
+    for(n=0;n<4;n++)
+    {
+    
+	sscanf(T1[n],"%2" SCNo64 "%" SCNu64 "%c %2" SCNo64 "%" SCNu64,&f1,&n1,&b,&f2,&n2);
+	bbit = (b == '/')?1:0 ;
+	//printf("%02o %4d%c%02o %4d\n",F1,N1,Bbit?'/':':',F2,N2);
+	II = (f1 << 33) | (n1 << 20) | (bbit << 19) | (f2 << 13) | n2;
+	dumpWord(II);
+	CoreStore[n] = II;
+    }
+
+    
+#if 0
+   // Make sure T1 is in place.
+    texttoword("264:060",0);
+    texttoword("224/163",1);
+    texttoword("555:710",2);
+    texttoword("431:402",3);
+#endif    
+}
 
 
 
@@ -267,7 +2628,7 @@ int32_t STORE_LS;  /**< Bottom half on store chain */
 
 
 
-int ALWAYS = TRUE;   /* used for conditional jump decoding */
+int ALWAYS = true;   /* used for conditional jump decoding */
 int NEGA,Z;
 int *Conditions[] = {&ALWAYS,&NEGA,&Z,&OFLOW};
 
@@ -349,7 +2710,7 @@ void fn44(void); void fn45(void); void fn46(void); void fn47(void);
 void fn50(void); void fn51(void); void fn52(void); void fn53(void);
 void fn54(void); void fn55(void); void fn56(void); void fn57(void);
 
-void fn6X(void); void fn63(void);
+void fn60(void); void fn61(void); void fn62(void); void fn63(void);
 void fn64(void); void fn65(void); void fn66(void); void fn67(void);
 
 void fn70(void); void fn71(void); void fn72(void); void fn73(void);
@@ -364,7 +2725,7 @@ void (*functions[])(void) =
   fn30,fn31,fn32,fn33,fn34,fn35,fn36,fn37,
   fn40,fn41,fn42,fn43,fn44,fn45,fn46,fn47,
   fn50,fn51,fn52,fn53,fn54,fn55,fn56,fn57,
-  fn6X,fn6X,fn6X,fn63,fn64,fn65,fn66,fn67,
+  fn60,fn61,fn62,fn63,fn64,fn65,fn66,fn67,
   fn70,fn71,fn72,fn73,fn74,fn75,fn76,fn77};
 
 
@@ -794,10 +3155,15 @@ void PreEmulate(gboolean updateFlag)
 
 		if(WG_ControlButtonPresses & WG_operate)
 		{
-			if(S) SS25 = TRUE;
-			if(WI && !R) SS3 = TRUE; /* 17/4/06 added !R */
+			if(S) SS25 = true;
+			if(WI && !R) SS3 = true; /* 17/4/06 added !R */
 		}
-		if(SS25) FPO = FALSE;
+		if(SS25)
+		{
+		    FPO = false;
+		    PARITY = false;
+		}
+		
 
 		if(WG_ControlButtonPresses & WG_battery_on)
 		{
@@ -1248,7 +3614,7 @@ void Emulate(int wordTimesToEmulate)
 
 		if (ADDRESS >= 4)
 		{
-		    hash(ADDRESS,STORE_CHAIN);
+		    //hash(ADDRESS,STORE_CHAIN);
 		    CoreStore[ADDRESS] = STORE_CHAIN;
 		}
 
@@ -1966,10 +4332,24 @@ SSMMMMMM MMMMMMMM MMMMMMMM MMMMMMMm nn000000
 n = extra mantisa bits held during calculations
 */
 
+void fn60(void)
+{
+    fn6X(060);
+}
+
+void fn61(void)
+{
+    fn6X(061);
+}
+
+void fn62(void)
+{
+    fn6X(062);
+}
 
 
 
-void fn6X(void)
+void fn6X(int FN)
 {
     int ACCexp,STOREexp,diff,negdiff,RightShift,LeftShift,NED,NED16,NEDBAR16,K;
     int oflw,round;
@@ -2564,11 +4944,11 @@ static int testReady(int fn,int address)
 
   case F71:
   case F74:
-      ready |= ptsTestReady(fn,address);
+      ready = false; // TEMPREMOVE|= ptsTestReady(fn,address);
     break;
 
   case F75:
-
+/*
     if(address == 1027)
     {
 #if FILM
@@ -2583,8 +4963,11 @@ static int testReady(int fn,int address)
       ready = FALSE;
       printf("%s FN75 %d (0x%02x)\n",__FUNCTION__,address,address);
     }
+*/
+      ready = false;
     break;
   case F76:
+      /*
 #if FILM
     ready |= filmControllerReady(fn,address);
 #endif
@@ -2593,12 +4976,17 @@ static int testReady(int fn,int address)
   default:
     printf("%s instruction not implelemnted\n",__FUNCTION__);
     break;
+      */
+      ready = false;
   }
   return(ready);
 }
 
 static void setACT(int fn,int address)
 {
+    return();
+}
+#if 0	
     switch(fn)
     {
     case F72:
@@ -2614,7 +5002,7 @@ static void setACT(int fn,int address)
 
     case F71:
     case F74:
-	ptsSetACT(fn,address);
+	TEMPREMOVE ptsSetACT(fn,address);
 	break;
 
     case F75:
@@ -2684,14 +5072,14 @@ static void setACT(int fn,int address)
 
     return;
 }
-
+#endif
 
 void fn71(void)
 {
   if(testReady(F71,IR&2048))
   {
     setACT(F71,IR&2048);
-    ACC.bytes[0] |= (uint8_t)  readTRlines();
+    ACC |= readTRlines();
     if(B)
     {
       B = FALSE;
@@ -3165,7 +5553,7 @@ uint8_t *TransferAndFinish(gboolean Transfer,gboolean Finish,int count,uint8_t *
 	    /* You can't overwrite the initial instructions !*/
 	    if(F77Address > 3)
 	      {
-		  hash(F77Address,STORE_CHAIN);
+		  //hash(F77Address,STORE_CHAIN);
 #if 0
 		guchar b1,b2,b3,*ptr,*ptr1;
 		b1 =  STORE_CHAIN.bytes[0];

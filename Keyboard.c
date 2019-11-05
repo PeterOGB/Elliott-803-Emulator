@@ -133,6 +133,13 @@ enum actions {FREE=0,LATCH,TOGGLE,RADIO};
 
 static int buttonsReleased;
 static unsigned int rowValues[ROWCOUNT];
+//{F1=0,N1,F2,N2,OPERATE,RON,CS,MD,RESET,BATOFF,BATON,CPUOFF,CPUON,SELSTOP,ROWCOUNT}; 
+
+static enum WiringEvent rowToWires[] = {F1WIRES,N1WIRES,F2WIRES,N2WIRES,OPERATEWIRE,RONWIRES,
+					CSWIRE,MDWIRE,RESETWIRE,
+					BATTERY_ON_PRESSED,BATTERY_OFF_PRESSED,
+					COMPUTER_ON_PRESSED,COMPUTER_OFF_PRESSED,
+					SSWIRE};
 
 
 static GdkRGBA LampShades[2];
@@ -241,7 +248,7 @@ on_WordGenDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     GtkAllocation  DrawingAreaAlloc;
     struct buttonInfo *bp;
 
-    printf("%s called\n",__FUNCTION__);
+    //printf("%s called\n",__FUNCTION__);
     
     if(firstCall)
     {
@@ -1403,11 +1410,6 @@ static void powerOn(__attribute__((unused)) unsigned int dummy)
     lampOn = TRUE;
     lampChanged = TRUE;
 
-    // Testing
-    DM160Values[0] = 1.0;
-    DM160sChanged = TRUE;
-
-
     gtk_widget_queue_draw(WordGenDrawingArea);
 }
 
@@ -1416,10 +1418,6 @@ static void powerOff(__attribute__((unused)) unsigned int dummy)
     lampOn = FALSE;
     lampChanged = TRUE;
 
-    // Testing
-    DM160Values[0] = 0.0;
-    DM160sChanged = TRUE;
-    
     gtk_widget_queue_draw(WordGenDrawingArea);
 }
 
@@ -1432,14 +1430,14 @@ static void updateDM160s(__attribute__((unused)) unsigned int dummy)
        1/288E-6 / 20 = 173.111
     */
 
-    printf("%s called\n",__FUNCTION__);
+    //printf("%s called\n",__FUNCTION__);
     
     // Copy values from Emualte.c and set flag
     for(int n=0;n<6;n++) DM160Values[n] = DM160s_bright[n] / 174.0;
     DM160sChanged = TRUE;
     if(!InWordGenWindow)
     {
-	printf("%s Redraw queued\n",__FUNCTION__);
+	//printf("%s Redraw queued\n",__FUNCTION__);
 	gtk_widget_queue_draw(WordGenDrawingArea);
     }
 }
@@ -2524,6 +2522,14 @@ void WordGenInit(GtkBuilder *builder,
 
     readConfigFile("KeyboardState",userPath,savedStateTokens);
 
+
+    for(int row=0; row < ROWCOUNT; row += 1)
+    {
+	wiring(rowToWires[row],rowValues[row]);
+    }
+
+
+    
     addSoundHandler(keyboardSoundFunc);
     
     gtk_widget_show(WordGenWindow);
