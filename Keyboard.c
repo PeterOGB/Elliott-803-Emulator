@@ -1106,7 +1106,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 			showing = HAND_ONE_FINGER;
 			}
 		    }
-		    wiring(VOLUME_CONTROL,volumeY+deltaVolume);
+		    wiring(VOLUME_CONTROL,(unsigned int) (volumeY+deltaVolume));
 		}
 	    }
 	}

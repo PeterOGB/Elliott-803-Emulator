@@ -23,7 +23,8 @@ int getPTSpower(void);
 int texttoword(const char *text,int address);
 //uint8_t *TransferAndFinish(gboolean Transfer,gboolean Finish,int count,uint8_t *data);
 
-enum IOINSTR {F71,F72,F74,F75,F76,F77};
+// Replaced by definitions on Wires.h
+//enum IOINSTR {F71,F72,F74,F75,F76,F77};
 
 //uint8_t getClines(void);
 void setCPUVolume(unsigned int level);

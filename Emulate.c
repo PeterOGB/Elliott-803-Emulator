@@ -15,7 +15,7 @@
 #include "Wiring.h"
 //#include "Sound.h"
 
-#define FILM 0
+//#define FILM 0
 
 
 extern void addSamplesFromCPU(int16_t first,int16_t remainder);
@@ -153,15 +153,17 @@ static void FetchStore(int32_t address,
     *MSp = readWord &  0xFFFFF; /* Top 20 bits */
 }
 
+#if 0
 static void WriteStore(int address, E803word *datae)
 {
     address &= 8191;
     CoreStore[address] = *datae;
 }
+#endif
 
 void setCPUVolume(unsigned int level)
 {
-    CPUVolume = level * 0x40;
+    CPUVolume = (int16_t) (level * 0x40);
 }
 
 // Called before emulate to handle button presses etc.
@@ -1584,21 +1586,7 @@ void fn67(void)
 }
 
 
-// Some static stubs until the PTS is implemented
-static int ptsTestReady(__attribute__((unused)) int fn,__attribute__((unused)) int address)
-{
-    return(0);
-}
 
-static void ptsSetACT(__attribute__((unused)) int Fn,__attribute__((unused)) int address)
-{
-
-}
-
-static E803word readTRlines(void)
-{
-  return(0);
-}
 
 
 
@@ -1647,18 +1635,10 @@ void reader1CharBufferSave(char ch)
 //extern void setClines(int n); 
 //extern void ptsSetACT(int fn,int address);
 //extern void plotterSetACT(int fn,int address);
-static int Blines;
-static uint8_t Clines;
-// TODO add F75
-//enum IOINSTR {F71,F72,F74,F75,F76,F77};
+ //static int Blines;
+//static uint8_t Clines;
 
-
-static uint8_t getClines(void)
-{
-    return Clines;
-}
-
-
+#if 0
 static int testReady(int fn,int address)
 {
   int ready = false;
@@ -1679,6 +1659,9 @@ static int testReady(int fn,int address)
     break;
 
   case F71:
+      
+
+      break;
   case F74:
       ready |= ptsTestReady(fn,address);
     break;
@@ -1801,86 +1784,48 @@ static void setACT(int fn,int address)
 
     return;
 }
+#endif
+static bool Ready = false;
+static unsigned int TRLines = 0;
+
+static void setReady(unsigned int value)
+{
+    Ready = (value != 0);
+}
+
+static void setTRLines(unsigned int value)
+{
+    TRLines = value;
+}
+
+
 
 
 void fn71(void)
 {
-  if(testReady(F71,IR&2048))
-  {
-    setACT(F71,IR&2048);
-    ACC |= readTRlines();
-    if(B)
-    {
-      B = false;
-    }
+    //printf("%s Pre  Ready=%s",__FUNCTION__,Ready?"TRUE":"FALSE");
+    wiring(F71,1);    // Send F71 to PTS
+    //printf("%s Post Ready=%s",__FUNCTION__,Ready?"TRUE":"FALSE");
 
-  }
-  else
-  {
-    B = true;
-  }
+    if(Ready)
+    {
+	wiring(ACT,1);
+	ACC |= TRLines & 0x1F;
+	//printf("%s TRlines=%u\n",__FUNCTION__,TRLines);
+	wiring(ACT,0);
+	wiring(F71,0);
+	B = false;
+    }
+    else
+    {
+	B = true;
+    }
+    
 
   return;
 }    
 
 
-
-#if 0
-	if(!reader1Mode)
-	{
-		/* Normal GUI reader */
-		if( reader1Act && (reader_tape_motion(1,0) == 1))
-		{   
-			/* char in the buffer so ACT.  Now use the
-	       tape_micro_position to find the character to read */
-			B = false;
-			PTS_Busy = false;
-			ACC.bytes[0] |= (ch = Reader_tape_buffer[0][Reader_tape_micro_position[0] / 7] & 0x1F);
-
-			/* make the reader go busy near end of tape */
-			if(((Reader_tape_micro_position[0] / 7) + 7) >  Reader_tape_buffer_size[0])
-			{
-				reader1Act = false;
-				reader1EOT = true;
-			}
-		}
-		else
-		{  /* No char available */
-			B = true;
-			PTS_Busy = true;
-		}
-	}
-	else
-	{
-		/* Use the real reader.  Still check reader1Act to allow virtual 
-	   PTS manual button to work as expected */	
-		if(!reader1Act)
-		{
-			B = true;
-			PTS_Busy = true;
-		}
-		else
-		{
-			if(reader1CharBufferRead != reader1CharBufferWrite)
-			{
-				B = false;
-				PTS_Busy = false;
-				//printf("F71 read %02X\n",reader1CharBuffer[reader1CharBufferRead] & 0x1F);
-				ACC.bytes[0] |= reader1CharBuffer[reader1CharBufferRead++] & 0x1F;
-				reader1CharBufferRead &= 0xFF;
-				write(reader_fd,"R",1);
-				tcdrain(reader_fd);
-			}
-			else
-			{
-				doExternalDeviceFSM(FUNC71);
-				B = true;
-				PTS_Busy = true;
-			}
-		}
-	}
-#endif
-  
 
 
 
@@ -1888,7 +1833,7 @@ int plotterAct = 0;
 
 void fn72(void)
 {
-
+#if 0
   if(testReady(F72,IR&7680))
   {
 //    Clines = (IR&0x3F);
@@ -1903,35 +1848,11 @@ void fn72(void)
   {
     B = true;
   }
-}
-
-
-#if 0
-    unsigned char  bits;
-
-    if(CalcompBusy || !plotterAct)
-    {
-	B = true;
-    }
-    else
-    {
-	CalcompBusy = true;
-	bits = IR  & 0x3F;
-	if( (bits & 0x30) == 0)
-	{
-	    start_timer(&CalcompBusy,0.003);
-	}
-	else
-	{
-	    start_timer(&CalcompBusy,0.1);
-	}
-	B = false;
-	   
-	bits = IR  & 0x3F;
-	plotterMessage[plotter_moves++] = '@' +  bits;
-    }
-}
 #endif
+}
+
+
+
 void fn73(void)
 {
     E803_SCR_to_STORE(&SCR,&STORE_CHAIN);
@@ -1945,21 +1866,21 @@ int F74punchAt;
 
 void fn74(void)
 {
+    wiring(F74,1);
 
-  if(testReady(F74,IR&6144))
-  {
-    Clines = (IR&0x1F);
-    setACT(F74,IR&6144);
-    if(B)
+    if(Ready)
     {
-      B = false;
+	wiring(CLINES,IR&0x1F);
+	wiring(ACT,1);
+	wiring(ACT,0);
+	wiring(F74,0);
+	B = false;
+    }
+    else
+    {
+	B = true;
     }
 
-  }
-  else
-  {
-    B = true;
-  }
 }
 
 
@@ -2189,6 +2110,7 @@ extern int filmHandlerControlWords[5];
 
 void fn76(void)
 {
+#if 0
   if(testReady(F76,IR&8191))
   {
     setACT(F76,IR&8191);
@@ -2204,6 +2126,7 @@ void fn76(void)
   {
     B = true;
   }
+#endif  
 }
 
 
@@ -2250,7 +2173,7 @@ void fn76old(void)
 
 
 uint8_t storeBuffer[64*5];
-
+#if 0
 static uint8_t *TransferAndFinish(__attribute__((unused)) bool Transfer,
 				  __attribute__((unused))bool Finish,
 				  __attribute__((unused))int count,
@@ -2353,11 +2276,12 @@ static uint8_t *TransferAndFinish(__attribute__((unused)) bool Transfer,
     dataOut = storeBuffer;
 	
   }
-
+#endif
 
   return(dataOut);
-  #endif
 }
+#endif
+
 
 void fn77(void)
 {
@@ -2444,8 +2368,7 @@ const char *T1[4] = {"264:060","224/163","555:710","431:402"};
 // Called from CpuInit
 void StartEmulate(char *coreImage)
 {
-    connectWires(SUPPLIES_ON,cpuPowerOn);
-    connectWires(SUPPLIES_OFF,cpuPowerOff);
+
     uint64_t f1,n1,f2,n2,bbit;
     char b;
     E803word II;
@@ -2471,6 +2394,13 @@ void StartEmulate(char *coreImage)
 	CoreStore[n] = II;
     }
 
+
+    connectWires(SUPPLIES_ON,cpuPowerOn);
+    connectWires(SUPPLIES_OFF,cpuPowerOff);
+    connectWires(READY,setReady);
+    connectWires(TRLINES,setTRLines);
+
+    
     
 #if 0
    // Make sure T1 is in place.
@@ -4946,6 +4876,10 @@ static int testReady(int fn,int address)
     break;
 
   case F71:
+      
+
+
+      break;
   case F74:
       ready = false; // TEMPREMOVE|= ptsTestReady(fn,address);
     break;
