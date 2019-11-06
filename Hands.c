@@ -118,7 +118,7 @@ stackTrace(void)
 gdouble MouseAtX,MouseAtY;
 
 void HandsInit(__attribute__((unused)) GtkBuilder *builder,
-	       __attribute__((unused)) GString *sharedPath,
+	       GString *sharedPath,
 	       __attribute__((unused))  GString *userPath)
 {
     GString *fileName;

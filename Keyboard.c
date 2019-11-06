@@ -2024,13 +2024,14 @@ static Token savedStateTokens[] = {
 
 __attribute__((used))
 void WordGenInit(GtkBuilder *builder,
-		 __attribute__((unused))  GString *sharedPath,
+		 GString *sharedPath,
 		 __attribute__((unused))  GString *userPath)
 {
     GString *fileName = NULL;
     int width,height;
     struct buttonInfo *button,*reset;
     int xpos,ypos,buttonNumber;
+    GError *error;
     
     WordGenWindow = GTK_WIDGET(gtk_builder_get_object_checked (builder, "WordGenWindow"));
     WordGenDrawingArea = GTK_WIDGET(gtk_builder_get_object_checked(builder,"WordGenDrawingArea"));
@@ -2049,13 +2050,22 @@ void WordGenInit(GtkBuilder *builder,
 
    for(int n = 0; n < BUTTONTYPES; n++)
     {
-	g_string_printf(fileName,"%s%sDown.gif","/usr/local/share/Elliott803/",gifFileNames[n]);
-	buttonPixbufs[n][1] = gdk_pixbuf_new_from_file(fileName->str,NULL);
+	error = NULL;
+	g_string_printf(fileName,"%sgraphics/%sDown.gif",sharedPath->str,gifFileNames[n]);
+	buttonPixbufs[n][1] = gdk_pixbuf_new_from_file(fileName->str,&error);
 	//printf("Reading %s %p\n",fileName->str,buttonPixbufs[n][1]);
+
+	if(error != NULL)
+	    g_error("Failed to read image file %s due to %s\n",fileName->str,error->message);
+
 	
-	g_string_printf(fileName,"%s%sUp.gif","/usr/local/share/Elliott803/",gifFileNames[n]);
-	buttonPixbufs[n][0] = gdk_pixbuf_new_from_file(fileName->str,NULL);
+	error = NULL;
+	g_string_printf(fileName,"%sgraphics/%sUp.gif",sharedPath->str,gifFileNames[n]);
+	buttonPixbufs[n][0] = gdk_pixbuf_new_from_file(fileName->str,&error);
 	//printf("Reading %s %p\n",fileName->str,buttonPixbufs[n][0]);
+
+	if(error != NULL)
+	    g_error("Failed to read image file %s due to %s\n",fileName->str,error->message);
     }
    
    g_string_free(fileName,TRUE);
