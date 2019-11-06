@@ -423,11 +423,11 @@ void Emulate(int wordTimesToEmulate)
 		//Z = (ACC.bytes[0] | ACC.bytes[1] | ACC.bytes[2] | ACC.bytes[3]
 		//     | ACC.bytes[4]) ? FALSE : TRUE;
 
-		Z = (ACC & 07777777777777) ? false : true;
+		Z = (ACC & Bits39) ? false : true;
 
 		//NEGA = (ACC.bytes[4] & 0x40) ? TRUE : FALSE;
 
-		NEGA = (ACC & 04000000000000) ? true : false;
+		NEGA = (ACC & BitsSign) ? true : false;
 		
 		/* Added PTSBusy to variables to set cleared by reset
 		   Fri Aug  8 20:20:31 BST 1997*/
@@ -1246,6 +1246,28 @@ static void fn6X(int FN)
     return;
 }
 
+#if 0
+static
+void dumpWordFile(FILE *fp,E803word *wp)
+{
+
+    E803word bit;
+    int n;
+    E803word w;
+    w = *wp;
+    bit = 0x8000000000;
+    
+    n = 40;
+    while(n--)
+    {
+	fputc((w&bit)?'1':'0',fp);
+	bit >>= 1;
+    }
+//  REG_decode(&wp->bytes[0],text);
+}
+
+#endif
+
 void fn60(void)
 {
     fn6X(060);
@@ -1427,7 +1449,7 @@ void fn64(void)
 	//DivByZero = (STORE_CHAIN.bytes[0] | STORE_CHAIN.bytes[1] | 
 	//	     STORE_CHAIN.bytes[2] | STORE_CHAIN.bytes[3] |
 	//	     STORE_CHAIN.bytes[4]) ? false : true;
-	DivByZero = (STORE_CHAIN != 0)  ? false : true;
+	DivByZero = ((STORE_CHAIN & Bits40) != 0)  ? false : true;
 	
 	if(DivByZero)
 	{
@@ -1440,7 +1462,8 @@ void fn64(void)
     else
     {
 	Same = !((ACCmant ^ MREG) & 0x8000000000);
-	MantZ = (ACCmant != 0) ? false : true;
+	MantZ = ((ACCmant & Bits40) != 0) ? false : true;
+	//printf("Same = %s MantZ = %s\n",Same?"TRUE":"FALSE",MantZ?"TRUE":"FALSE");
 
 	if(MantZ) exact = true;
 
@@ -1453,7 +1476,8 @@ void fn64(void)
 	{
 	    E803_mant_add(&MREG,&ACCmant);
 	}
-       
+	//printf("\n ACCmant=");
+	//dumpWordFile(stdout,&ACCmant);     
 	E803_mant_add(&ACCmant,&ACCmant);
 
 	if(firstbit)
@@ -1467,6 +1491,15 @@ void fn64(void)
 	    E803_mant_shift_right(&TshiftBit,1,1);
 	}
 
+#if 0
+	printf("T=%d \n    TBit=",T);
+	dumpWordFile(stdout,&TBit);
+	printf("\n    MREG=");
+	dumpWordFile(stdout,&MREG);
+	printf("\n ACCmant=");
+	dumpWordFile(stdout,&ACCmant);
+	printf("\n");
+#endif
 	T += 1;
 
 	if( (T == 32) || (MantZ))
@@ -1477,7 +1510,7 @@ void fn64(void)
 	    oflw = 0;
 	    LeftShift = 0;
 
-	    MantZ = (MANTREG != 0) ? false : true;
+	    MantZ = ((MANTREG & Bits40) != 0) ? false : true;
 
 	    if(MantZ)
 	    {
@@ -1518,6 +1551,9 @@ void fn64(void)
 	    }  
 	    E803_fp_join(&MANTREG,&EXPREG,&ACC);
 	    AR = E803_ZERO;
+	    //printf("%s Result=",__FUNCTION__);
+	    //dumpWordFile(stdout,&ACC);
+	    //printf("\n");
 	}
     }
 }
@@ -1549,7 +1585,7 @@ void fn65(void)
     {   /* Fp standardisation */
 	AR = E803_ZERO;
 
-	EXP = (ACC != 0) ? false : true;
+	EXP = ((ACC & Bits40) != 0) ? false : true;
 	if(EXP) return;
       
 	oflw = false;
@@ -5916,7 +5952,7 @@ static GString *dumpWord(GString *text,E803word *wp)
 
 
 
-/*
+#if 0
 void dumpWordFile(FILE *fp,E803word *wp)
 {
     char *cp;
@@ -5992,7 +6028,7 @@ void dumpWordFile(FILE *fp,E803word *wp)
     fprintf(fp,"%f",total);
 #endif
 }
-*/
+#endif
 
 /*
 void dumpMant(E803word *wp)
