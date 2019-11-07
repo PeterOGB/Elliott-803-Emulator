@@ -243,7 +243,27 @@ void CpuInit(__attribute__((unused)) GtkBuilder *builder,
 	g_string_append(CoreImageFileName,"CoreImage");
     }
 
+/*
+    {
 
+	GFile *gf;
+	GBytes *gb;
+
+	gf = g_file_new_for_path("/proc/self/exe");
+	
+	
+	gb = g_file_load_bytes(gf,
+			       NULL,NULL,NULL);
+
+	g_info("/proc/self/exe = (%s)\n",(char *)gb);
+	
+
+	g_object_unref(gf);
+	g_bytes_unref(gb);
+    }
+*/
+    // Should be done with g_file_load_bytes as above.
+    
     g_file_get_contents(CoreImageFileName->str,
 			&core,
 			&length,

@@ -4,6 +4,14 @@ Move glade file to /usr/local/share/803-Emulator/803-Emulator.glade
 
 
 
+First time startup:
+
+
+
+
+
+
+
 ERROR
 CRITICAL
 WARNING
