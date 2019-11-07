@@ -215,7 +215,6 @@ void CpuInit(__attribute__((unused)) GtkBuilder *builder,
 {
     GString *CoreImageFileName = NULL;
     gchar *core = NULL;
-    gsize length;
     GError *error = NULL;
     
     //g_info("%s called\n",__FUNCTION__);
@@ -244,50 +243,40 @@ void CpuInit(__attribute__((unused)) GtkBuilder *builder,
     }
 
 
-#if 1
+
     {
 
 	GFile *gf;
 	GBytes *gb;
 	GByteArray *gba;
+	
 
 	gf = g_file_new_for_path(CoreImageFileName->str);
 	
 	
 	gb = g_file_load_bytes(gf,
-			       NULL,NULL,NULL);
+			       NULL,NULL,&error);
 
-	// Don't unref the gba as it's data IS the core store.
-	gba = g_bytes_unref_to_array(gb);
-	g_byte_array_ref(gba);
+	if(error != NULL)
+	{
+	    g_warning("Failed to open core file %s (%s), using a clear store\n",
+		      CoreImageFileName->str,error->message);
+	    core = calloc(8192,sizeof(E803word));
+	
+	}
+	else
+	{
+	    // Don't unref the gba as it's data IS the core store.
+	    gba = g_bytes_unref_to_array(gb);
+	    g_byte_array_ref(gba);
+	    
+
+	    core = (char *) gba->data;
+
+	    g_info("Core image file Length = %u\n",gba->len);
+	}
 	g_object_unref(gf);
-
-	core = (char *) gba->data;
-
-	g_info("Core image file Length = %u\n",gba->len);
-	
     }
-
-    // Should be done with g_file_load_bytes as above.
-    
-    //g_file_get_contents(CoreImageFileName->str,
-//			&core,
-//			&length,
-//			&error);
-
-    //g_info("Core image file Length = %" G_GUINT64_FORMAT "\n",gba->len);
-
-    if(error != NULL)
-    {
-	g_warning("Failed to open core file %s, using a clear store\n",
-		  CoreImageFileName->str);
-		  
-	
-    }
-#endif
-    //core = calloc(8192,sizeof(E803word));
-
-
     
     StartEmulate(core);
     
