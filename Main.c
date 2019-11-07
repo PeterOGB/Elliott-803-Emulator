@@ -141,18 +141,27 @@ int main(int argc, char *argv[])
 	exit(EXIT_FAILURE);
     }
 
+    
+    // Normal GTK application start up
+    gtk_init (&argc, &argv);
+
+    // Install simple logging to stdout.
+    LoggingInit();
+    
     /* Set global path to user's configuration and machine state files */
    
     uid = getuid();
     pw = getpwuid(uid);
 
     configPath = g_string_new(pw->pw_dir);
-    configPath = g_string_append(configPath,"/.803-Emulator2/");
+    configPath = g_string_append(configPath,"/.803-Emulator/");
 
+    // Now Check it exists.   If it is missing it is not an
+    // error as it may be the first time this user has run the emulator.
     {
-	GFile *gf;
+	GFile *gf = NULL;
 	GFileType gft;
-	GFileInfo *gfi;
+	GFileInfo *gfi = NULL;
 	GError *error2 = NULL;
 	
 	gf = g_file_new_for_path(configPath->str);
@@ -164,35 +173,22 @@ int main(int argc, char *argv[])
 
 	if(error2 != NULL)
 	{
-	    printf("error = %s\n",error2->message);
-
+	    g_warning("Could not read user configuration directory: %s\n", error2->message);
 	}
+	else
+	{
 	
-	gft = g_file_info_get_file_type(gfi);
+	    gft = g_file_info_get_file_type(gfi);
 
-	printf("%s GFileType = %d\n",__FUNCTION__,gft);
-
-	if(gft != G_FILE_TYPE_DIRECTORY)
-	    g_warning("User's configuration directory (%s) is missing.\n",configPath->str);
-
-	g_object_unref(gfi);
-	g_object_unref(gf);
+	    if(gft != G_FILE_TYPE_DIRECTORY)
+		g_warning("User's configuration directory (%s) is missing.\n",configPath->str);
+	}
+	if(gfi) g_object_unref(gfi);
+	if(gf) g_object_unref(gf);
 
     }
 
-    
-    
-    /* Set global path to shared icons, pictures and sound effect files */
-    sharedPath = g_string_new("/usr/local/share/803-Emulator/");
-
-
-
-    // Normal GTK application start up
-    gtk_init (&argc, &argv);
-
-    LoggingInit();
-
-
+  
     // Find out where the executable is located.
     {
 	GFile *gf;
@@ -209,33 +205,71 @@ int main(int argc, char *argv[])
 
 	if(error2 != NULL)
 	{
-	    printf("error = %s\n",error2->message);
-
+	    g_error("Could not read /proc/self/exe: %s\n", error2->message);
 	}
-	
-	gft = g_file_info_get_file_type(gfi);
-
-	printf("%s GFileType = %d\n",__FUNCTION__,gft);
-
-	if(gft != G_FILE_TYPE_SYMBOLIC_LINK)
+	else
 	{
-	    const char *exename = g_file_info_get_symlink_target(gfi);
-	    g_info("exename is (%s)\n",exename);
+	    gft = g_file_info_get_file_type(gfi);
 
-	    if(strcmp(PROJECT_DIR"/803",exename)==0)
+	    if(gft != G_FILE_TYPE_SYMBOLIC_LINK)
 	    {
-		g_info("Running in the build tree, using local resources.\n");
-	    }
-	    else
-	    {
-		g_info("Running from installed file, using shared resources.\n");
+		const char *exename = g_file_info_get_symlink_target(gfi);
+		g_info("exename is (%s)\n",exename);
+
+		if(strcmp(PROJECT_DIR"/803",exename)==0)
+		{
+		    g_info("Running in the build tree, using local resources.\n");
+		    /* Set global path to local icons, pictures and sound effect files */
+		    sharedPath = g_string_new(PROJECT_DIR"/803-Resources/");		
+		}
+		else
+		{
+		    g_info("Running from installed file, using shared resources.\n");
+		    /* Set global path to shared icons, pictures and sound effect files */
+		    sharedPath = g_string_new("/usr/local/share/803-Resources/");
+		}
 	    }
 	}
-
 	g_object_unref(gfi);
 	g_object_unref(gf);
     }
 
+    // Check that the resources directory exists.
+    
+    {
+	GFile *gf;
+	GFileType gft;
+	GFileInfo *gfi;
+	GError *error2 = NULL;
+	
+	gf = g_file_new_for_path(sharedPath->str);
+	gfi = g_file_query_info (gf,
+				 "standard::*",
+				 G_FILE_QUERY_INFO_NONE,
+				 NULL,
+				 &error2);
+
+	if(error2 != NULL)
+	{
+	    g_error("Could not read Resources directory:%s\n", error2->message);
+	}
+	else
+	{
+	    gft = g_file_info_get_file_type(gfi);
+
+	    if(gft != G_FILE_TYPE_DIRECTORY)
+		g_warning("803 Resources directory (%s) is missing.\n",sharedPath->str);
+	}
+	g_object_unref(gfi);
+	g_object_unref(gf);
+
+    }
+
+    // Once a tape store is added here is where a default set of tapes for a user
+    // will need to be created if the users config directory is missing.
+
+
+    
 
     // New command line option parsing....
 
