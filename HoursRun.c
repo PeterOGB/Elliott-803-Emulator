@@ -116,7 +116,7 @@ static void HoursRunTimerTick(__attribute__((unused)) unsigned int dummy)
     static int counter = 0;
 
     if(Running) counter += 1;
-    if(counter < 1) return;
+    if(counter < 100) return;
     counter = 0;
 
     digitPositions[0] += STEP;

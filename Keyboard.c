@@ -1406,16 +1406,44 @@ on_WordGenDrawingArea_key_release_event(__attribute__((unused))GtkWidget *widget
     return GDK_EVENT_STOP;
 }
 
+static gboolean MainsOn = FALSE;
+static gboolean PowerOn = FALSE;
+
+static void mainsOn(__attribute__((unused)) unsigned int dummy)
+{
+
+    MainsOn = TRUE;
+    if(MainsOn && PowerOn)
+    {
+	lampOn = TRUE;
+	lampChanged = TRUE;
+	gtk_widget_queue_draw(WordGenDrawingArea);
+    }    
+}
+
+static void mainsOff(__attribute__((unused)) unsigned int dummy)
+{
+    MainsOn = FALSE;
+    lampOn = FALSE;
+    lampChanged = TRUE;
+    gtk_widget_queue_draw(WordGenDrawingArea);
+    
+}
+
 static void powerOn(__attribute__((unused)) unsigned int dummy)
 {
-    lampOn = TRUE;
-    lampChanged = TRUE;
-
-    gtk_widget_queue_draw(WordGenDrawingArea);
+    PowerOn = TRUE;
+    if(MainsOn && PowerOn)
+    {
+	lampOn = TRUE;
+	lampChanged = TRUE;
+	gtk_widget_queue_draw(WordGenDrawingArea);
+    }   
 }
 
 static void powerOff(__attribute__((unused)) unsigned int dummy)
 {
+    PowerOn = FALSE;
     lampOn = FALSE;
     lampChanged = TRUE;
 
@@ -2523,6 +2551,9 @@ void WordGenInit(GtkBuilder *builder,
     gdk_rgba_parse(&LampShades[0],"gray32");
     gdk_rgba_parse(&LampShades[1],"yellow1");
 
+    connectWires(MAINS_SUPPLY_ON,mainsOn);
+    connectWires(MAINS_SUPPLY_OFF,mainsOff);
+    
     connectWires(SUPPLIES_ON, powerOn);
     connectWires(SUPPLIES_OFF,powerOff);
     connectWires(UPDATE_DISPLAYS,updateDM160s);
@@ -2531,7 +2562,7 @@ void WordGenInit(GtkBuilder *builder,
     gtk_window_set_deletable(GTK_WINDOW(WordGenWindow),FALSE);
 
 
-    //readConfigFile("KeyboardState",userPath,savedStateTokens);
+    readConfigFile("KeyboardState",userPath,savedStateTokens);
 
 
     for(int row=0; row < ROWCOUNT; row += 1)

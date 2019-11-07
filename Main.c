@@ -131,6 +131,7 @@ int main(int argc, char *argv[])
     GString *gladeFileName;
     GError *error = NULL;
     GOptionContext *context;
+    gboolean createConfigDirectory = FALSE;
     
     
     /* Set the locale according to environment variable */
@@ -174,6 +175,7 @@ int main(int argc, char *argv[])
 	if(error2 != NULL)
 	{
 	    g_warning("Could not read user configuration directory: %s\n", error2->message);
+	    createConfigDirectory = TRUE;
 	}
 	else
 	{
@@ -181,13 +183,21 @@ int main(int argc, char *argv[])
 	    gft = g_file_info_get_file_type(gfi);
 
 	    if(gft != G_FILE_TYPE_DIRECTORY)
+	    {
 		g_warning("User's configuration directory (%s) is missing.\n",configPath->str);
+		createConfigDirectory = TRUE;
+	    }
 	}
 	if(gfi) g_object_unref(gfi);
 	if(gf) g_object_unref(gf);
 
     }
 
+
+
+
+
+    
   
     // Find out where the executable is located.
     {
@@ -268,6 +278,26 @@ int main(int argc, char *argv[])
     // Once a tape store is added here is where a default set of tapes for a user
     // will need to be created if the users config directory is missing.
 
+    if(createConfigDirectory == TRUE)
+    {
+	GFile *gf;
+	GError *error2 = NULL;
+	
+	gf = g_file_new_for_path(configPath->str);
+	
+	g_file_make_directory (gf,
+                       NULL,
+                       &error2);
+
+	
+	if(error2 != NULL)
+	{
+	    g_error("Could not create  directory:%s\n", error2->message);
+	}
+
+	g_object_unref(gf);
+
+    }
 
     
 

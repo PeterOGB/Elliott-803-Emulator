@@ -141,7 +141,7 @@ void ContactorInit(GtkBuilder *builder,
     
     g_string_free(fileName,TRUE);
 
-    //readConfigFile("IsolatorState",userPath,savedStateTokens);
+    readConfigFile("IsolatorState",userPath,savedStateTokens);
     
     gtk_widget_show(ContactorWindow);
 }

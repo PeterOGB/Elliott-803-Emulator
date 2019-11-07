@@ -60,7 +60,7 @@ static int doSuppliesOff(int state,
 {
     wiring(SUPPLIES_OFF,0);
     SuppliesOn = FALSE;
-    if(state == 11)
+    if((state == 11) || (state == 13))
 	PowerFSM.nextEvent = CHARGER_DISCONNECTED;
     return -1;
 }
@@ -128,10 +128,11 @@ struct fsmtable PowerTable[] = {
 
     { 11,   MAINS_SUPPLY_ON,           5, NULL },
     { 11,   SUPPLIES_OFF,             12, doSuppliesOff },
-   
+    { 11,   COMPUTER_OFF_PRESSED,     13, doCompOffPress },
     
     { 12,   CHARGER_DISCONNECTED,      0, doChrgrDisconnect },
 
+    { 13,   SUPPLIES_OFF,             12, doSuppliesOff },
     {-1,    -1,                        -1, NULL }
 };
     

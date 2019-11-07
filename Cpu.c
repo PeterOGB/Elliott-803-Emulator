@@ -243,43 +243,49 @@ void CpuInit(__attribute__((unused)) GtkBuilder *builder,
 	g_string_append(CoreImageFileName,"CoreImage");
     }
 
-/*
+
+#if 1
     {
 
 	GFile *gf;
 	GBytes *gb;
+	GByteArray *gba;
 
-	gf = g_file_new_for_path("/proc/self/exe");
+	gf = g_file_new_for_path(CoreImageFileName->str);
 	
 	
 	gb = g_file_load_bytes(gf,
 			       NULL,NULL,NULL);
 
-	g_info("/proc/self/exe = (%s)\n",(char *)gb);
-	
-
+	// Don't unref the gba as it's data IS the core store.
+	gba = g_bytes_unref_to_array(gb);
+	g_byte_array_ref(gba);
 	g_object_unref(gf);
-	g_bytes_unref(gb);
+
+	core = (char *) gba->data;
+
+	g_info("Core image file Length = %u\n",gba->len);
+	
     }
-*/
+
     // Should be done with g_file_load_bytes as above.
     
-    g_file_get_contents(CoreImageFileName->str,
-			&core,
-			&length,
-			&error);
+    //g_file_get_contents(CoreImageFileName->str,
+//			&core,
+//			&length,
+//			&error);
 
-    g_info("Core image file Length = %" G_GUINT64_FORMAT "\n",length);
+    //g_info("Core image file Length = %" G_GUINT64_FORMAT "\n",gba->len);
 
     if(error != NULL)
     {
 	g_warning("Failed to open core file %s, using a clear store\n",
 		  CoreImageFileName->str);
 		  
-	core = calloc(8192,sizeof(E803word));
+	
     }
-
-    
+#endif
+    //core = calloc(8192,sizeof(E803word));
 
 
     
