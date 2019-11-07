@@ -1,0 +1,550 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated with glade 3.22.1 -->
+<interface>
+  <requires lib="gtk+" version="3.20"/>
+  <object class="GtkWindow" id="ContactorWindow">
+    <property name="can_focus">False</property>
+    <property name="resizable">False</property>
+    <signal name="delete-event" handler="on_ContactorWindow_delete_event" swapped="no"/>
+    <signal name="enter-notify-event" handler="on_ContactorWindow_enter_notify_event" swapped="no"/>
+    <signal name="leave-notify-event" handler="on_ContactorWindow_leave_notify_event" swapped="no"/>
+    <child>
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkDrawingArea" id="ContactorDrawingArea">
+        <property name="width_request">100</property>
+        <property name="height_request">120</property>
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="events">GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_STRUCTURE_MASK</property>
+        <signal name="button-press-event" handler="on_ContactorDrawingArea_button_press_event" swapped="no"/>
+        <signal name="button-release-event" handler="on_ContactorDrawingArea_button_release_event" swapped="no"/>
+        <signal name="draw" handler="on_ContactorDrawingArea_draw" swapped="no"/>
+        <signal name="motion-notify-event" handler="on_ContactorDrawingArea_motion_notify_event" swapped="no"/>
+      </object>
+    </child>
+  </object>
+  <object class="GtkWindow" id="CreedKeyboardWindow">
+    <property name="width_request">400</property>
+    <property name="height_request">300</property>
+    <property name="can_focus">False</property>
+    <property name="events">GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK | GDK_STRUCTURE_MASK</property>
+    <property name="title" translatable="yes">CreedKeyboard</property>
+    <property name="resizable">False</property>
+    <signal name="enter-notify-event" handler="on_CreedKeyboardWindow_enter_notify_event" swapped="no"/>
+    <signal name="key-press-event" handler="on_CreedKeyboardWindow_key_press_event" swapped="no"/>
+    <signal name="key-release-event" handler="on_CreedKeyboardWindow_key_release_event" swapped="no"/>
+    <signal name="leave-notify-event" handler="on_CreedKeyboardWindow_leave_notify_event" swapped="no"/>
+    <child>
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkDrawingArea" id="CreedKeyboardDrawingArea">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="events">GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_STRUCTURE_MASK</property>
+        <signal name="button-press-event" handler="on_CreedKeyboardDrawingArea_button_press_event" swapped="no"/>
+        <signal name="button-release-event" handler="on_CreedKeyboardDrawingArea_button_release_event" swapped="no"/>
+        <signal name="draw" handler="on_CreedKeyboardDrawingArea_draw" swapped="no"/>
+        <signal name="motion-notify-event" handler="on_CreedKeyboardDrawingArea_motion_notify_event" swapped="no"/>
+      </object>
+    </child>
+  </object>
+  <object class="GtkWindow" id="DrawersWindow">
+    <property name="width_request">400</property>
+    <property name="height_request">300</property>
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">Drawers</property>
+    <property name="resizable">False</property>
+    <property name="deletable">False</property>
+    <child>
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <child>
+              <object class="GtkDrawingArea" id="DrawersDrawingArea">
+                <property name="width_request">300</property>
+                <property name="height_request">300</property>
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="events">GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_STRUCTURE_MASK</property>
+                <signal name="button-press-event" handler="on_DrawersDrawingArea_button_press_event" swapped="no"/>
+                <signal name="button-release-event" handler="on_DrawersDrawingArea_button_release_event" swapped="no"/>
+                <signal name="draw" handler="on_DrawersDrawingArea_draw" swapped="no"/>
+                <signal name="enter-notify-event" handler="on_DrawersDrawingArea_enter_notify_event" swapped="no"/>
+                <signal name="leave-notify-event" handler="on_DrawersDrawingArea_leave_notify_event" swapped="no"/>
+                <signal name="motion-notify-event" handler="on_DrawersDrawingArea_motion_notify_event" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButtonBox" id="buttonbox1">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="orientation">vertical</property>
+                <property name="layout_style">start</property>
+                <child>
+                  <object class="GtkRadioButton" id="radiobutton1">
+                    <property name="label" translatable="yes">radiobutton</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
+                    <property name="xalign">0</property>
+                    <property name="active">True</property>
+                    <property name="draw_indicator">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkRadioButton" id="radiobutton2">
+                    <property name="label" translatable="yes">radiobutton</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
+                    <property name="xalign">0</property>
+                    <property name="draw_indicator">True</property>
+                    <property name="group">radiobutton1</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkRadioButton" id="radiobutton3">
+                    <property name="label" translatable="yes">radiobutton</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
+                    <property name="xalign">0</property>
+                    <property name="draw_indicator">True</property>
+                    <property name="group">radiobutton1</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">2</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkRadioButton" id="radiobutton4">
+                    <property name="label" translatable="yes">radiobutton</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
+                    <property name="xalign">0</property>
+                    <property name="draw_indicator">True</property>
+                    <property name="group">radiobutton1</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkRadioButton" id="radiobutton5">
+                    <property name="label" translatable="yes">radiobutton</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
+                    <property name="xalign">0</property>
+                    <property name="draw_indicator">True</property>
+                    <property name="group">radiobutton1</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">4</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkRadioButton" id="radiobutton6">
+                    <property name="label" translatable="yes">radiobutton</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
+                    <property name="xalign">0</property>
+                    <property name="draw_indicator">True</property>
+                    <property name="group">radiobutton1</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">5</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkRadioButton" id="radiobutton7">
+                    <property name="label" translatable="yes">radiobutton</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
+                    <property name="xalign">0</property>
+                    <property name="draw_indicator">True</property>
+                    <property name="group">radiobutton1</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">6</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkFrame" id="frame2">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="label_xalign">0</property>
+            <property name="shadow_type">none</property>
+            <child>
+              <object class="GtkAlignment" id="alignment2">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="left_padding">12</property>
+                <child>
+                  <object class="GtkEntry" id="tapeWritingEntry">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child type="label">
+              <object class="GtkLabel" id="label2">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">Writting on tape</property>
+              </object>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
+  <object class="GtkWindow" id="HoursRunWindow">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="resizable">False</property>
+    <property name="deletable">False</property>
+    <child>
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkDrawingArea" id="HoursRunDrawingArea">
+        <property name="width_request">180</property>
+        <property name="height_request">50</property>
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <signal name="draw" handler="on_HoursRunDrawingArea_draw" swapped="no"/>
+      </object>
+    </child>
+  </object>
+  <object class="GtkWindow" id="PTSWindow">
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">803 Paper Tape Station</property>
+    <property name="deletable">False</property>
+    <signal name="delete-event" handler="on_PTSWindow_delete_event" swapped="no"/>
+    <child>
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkDrawingArea" id="PTSDrawingArea">
+        <property name="width_request">800</property>
+        <property name="height_request">100</property>
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="events">GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_STRUCTURE_MASK</property>
+        <signal name="button-press-event" handler="on_PTSDrawingArea_button_press_event" swapped="no"/>
+        <signal name="button-release-event" handler="on_PTSDrawingArea_button_release_event" swapped="no"/>
+        <signal name="draw" handler="on_PTSDrawingArea_draw" swapped="no"/>
+        <signal name="enter-notify-event" handler="on_PTSDrawingArea_enter_notify_event" swapped="no"/>
+        <signal name="leave-notify-event" handler="on_PTSDrawingArea_leave_notify_event" swapped="no"/>
+        <signal name="motion-notify-event" handler="on_PTSDrawingArea_motion_notify_event" swapped="no"/>
+      </object>
+    </child>
+  </object>
+  <object class="GtkWindow" id="ReaderWindow">
+    <property name="width_request">400</property>
+    <property name="height_request">300</property>
+    <property name="can_focus">False</property>
+    <property name="hexpand">False</property>
+    <property name="vexpand">False</property>
+    <property name="title" translatable="yes">Reader</property>
+    <property name="resizable">False</property>
+    <property name="deletable">False</property>
+    <child>
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkDrawingArea" id="ReaderDrawingArea">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="events">GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_STRUCTURE_MASK</property>
+        <signal name="button-press-event" handler="on_ReaderDrawingArea_button_press_event" swapped="no"/>
+        <signal name="button-release-event" handler="on_ReaderDrawingArea_button_release_event" swapped="no"/>
+        <signal name="draw" handler="on_ReaderDrawingArea_draw" swapped="no"/>
+        <signal name="enter-notify-event" handler="on_ReaderDrawingArea_enter_notify_event" swapped="no"/>
+        <signal name="leave-notify-event" handler="on_ReaderDrawingArea_leave_notify_event" swapped="no"/>
+        <signal name="motion-notify-event" handler="on_ReaderDrawingArea_motion_notify_event" swapped="no"/>
+      </object>
+    </child>
+  </object>
+  <object class="GtkWindow" id="WordGenWindow">
+    <property name="can_focus">False</property>
+    <property name="events">GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK | GDK_STRUCTURE_MASK</property>
+    <property name="title" translatable="yes">Word Generator</property>
+    <property name="resizable">False</property>
+    <property name="deletable">False</property>
+    <signal name="delete-event" handler="on_WordGenWindow_delete_event" swapped="no"/>
+    <child>
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkDrawingArea" id="WordGenDrawingArea">
+        <property name="visible">True</property>
+        <property name="can_focus">True</property>
+        <property name="has_focus">True</property>
+        <property name="events">GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_STRUCTURE_MASK</property>
+        <signal name="button-press-event" handler="on_WordGenDrawingArea_button_press_event" swapped="no"/>
+        <signal name="button-release-event" handler="on_WordGenDrawingArea_button_release_event" swapped="no"/>
+        <signal name="draw" handler="on_WordGenDrawingArea_draw" swapped="no"/>
+        <signal name="enter-notify-event" handler="on_WordGenDrawingArea_enter_notify_event" swapped="no"/>
+        <signal name="key-press-event" handler="on_WordGenDrawingArea_key_press_event" swapped="no"/>
+        <signal name="key-release-event" handler="on_WordGenDrawingArea_key_release_event" swapped="no"/>
+        <signal name="leave-notify-event" handler="on_WordGenDrawingArea_leave_notify_event" swapped="no"/>
+        <signal name="motion-notify-event" handler="on_WordGenDrawingArea_motion_notify_event" swapped="no"/>
+      </object>
+    </child>
+  </object>
+  <object class="GtkAdjustment" id="adjustment1">
+    <property name="upper">500</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkImage" id="image1">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-goto-first</property>
+  </object>
+  <object class="GtkWindow" id="HandViewerWindow">
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">Operator's Hand Viewer</property>
+    <property name="resizable">False</property>
+    <property name="deletable">False</property>
+    <child>
+      <placeholder/>
+    </child>
+    <child>
+      <object class="GtkBox" id="box1">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkFrame" id="frame1">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="label_xalign">0</property>
+            <property name="shadow_type">in</property>
+            <child>
+              <object class="GtkAlignment" id="alignment1">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="left_padding">12</property>
+                <child>
+                  <object class="GtkDrawingArea" id="HandViewerDrawingArea">
+                    <property name="width_request">960</property>
+                    <property name="height_request">250</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="has_focus">True</property>
+                    <property name="events">GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_KEY_PRESS_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_STRUCTURE_MASK | GDK_SCROLL_MASK</property>
+                    <signal name="button-press-event" handler="on_HandViewerDrawingArea_button_press_event" swapped="no"/>
+                    <signal name="button-release-event" handler="on_HandViewerDrawingArea_button_release_event" swapped="no"/>
+                    <signal name="draw" handler="on_HandViewerDrawingArea_draw" swapped="no"/>
+                    <signal name="enter-notify-event" handler="on_HandViewerDrawingArea_enter_notify_event" swapped="no"/>
+                    <signal name="key-press-event" handler="on_HandViewerDrawingArea_key_press_event" swapped="no"/>
+                    <signal name="leave-notify-event" handler="on_HandViewerDrawingArea_leave_notify_event" swapped="no"/>
+                    <signal name="motion-notify-event" handler="on_HandViewerDrawingArea_motion_notify_event" swapped="no"/>
+                    <signal name="scroll-event" handler="on_HandViewerDrawingArea_scroll_event" swapped="no"/>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child type="label">
+              <object class="GtkLabel" id="label1">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">Tape Image</property>
+              </object>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox" id="box2">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <child>
+              <object class="GtkFrame" id="frame3">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="label_xalign">0</property>
+                <property name="shadow_type">in</property>
+                <child>
+                  <object class="GtkAlignment" id="alignment3">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="left_padding">12</property>
+                    <child>
+                      <object class="GtkEntry" id="HandViewerWritingOnTape">
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child type="label">
+                  <object class="GtkLabel" id="label3">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="label" translatable="yes">Writing on Tape</property>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButtonBox" id="buttonbox2">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="layout_style">start</property>
+                <child>
+                  <object class="GtkButton" id="windUpButton">
+                    <property name="label" translatable="yes">Wind-Up Tape</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="reverseButton">
+                    <property name="label" translatable="yes">Reversed Tape</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="updateWritingButton">
+                    <property name="label" translatable="yes">Update Writing</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">2</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="button1">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="halign">start</property>
+                    <property name="image">image1</property>
+                    <property name="always_show_image">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkSpinButton" id="debugSpinButton">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="adjustment">adjustment1</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">4</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="pack_type">end</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

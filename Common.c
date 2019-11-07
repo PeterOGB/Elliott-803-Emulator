@@ -227,7 +227,7 @@ gboolean readConfigFile(const char *fileName,GString *userPath,Token *savedState
 
     if((file = g_io_channel_new_file(configFileName->str,"r",&error)) == NULL)
     {
-	g_error("failed to open file %s\n",configFileName->str);
+	g_warning("failed to open file %s due to %s\n",configFileName->str,error->message);
 	return FALSE;
     }
 

@@ -21,6 +21,8 @@
 #include <locale.h>
 #include <pwd.h>
 
+#include "config.h"
+
 #include "Common.h"
 #include "Logging.h"
 #include "fsm.h"
@@ -145,7 +147,40 @@ int main(int argc, char *argv[])
     pw = getpwuid(uid);
 
     configPath = g_string_new(pw->pw_dir);
-    configPath = g_string_append(configPath,"/.803-Emulator/");
+    configPath = g_string_append(configPath,"/.803-Emulator2/");
+
+    {
+	GFile *gf;
+	GFileType gft;
+	GFileInfo *gfi;
+	GError *error2 = NULL;
+	
+	gf = g_file_new_for_path(configPath->str);
+	gfi = g_file_query_info (gf,
+				 "standard::*",
+				 G_FILE_QUERY_INFO_NONE,
+				 NULL,
+				 &error2);
+
+	if(error2 != NULL)
+	{
+	    printf("error = %s\n",error2->message);
+
+	}
+	
+	gft = g_file_info_get_file_type(gfi);
+
+	printf("%s GFileType = %d\n",__FUNCTION__,gft);
+
+	if(gft != G_FILE_TYPE_DIRECTORY)
+	    g_warning("User's configuration directory (%s) is missing.\n",configPath->str);
+
+	g_object_unref(gfi);
+	g_object_unref(gf);
+
+    }
+
+    
     
     /* Set global path to shared icons, pictures and sound effect files */
     sharedPath = g_string_new("/usr/local/share/803-Emulator/");
@@ -156,6 +191,51 @@ int main(int argc, char *argv[])
     gtk_init (&argc, &argv);
 
     LoggingInit();
+
+
+    // Find out where the executable is located.
+    {
+	GFile *gf;
+	GFileType gft;
+	GFileInfo *gfi;
+	GError *error2 = NULL;
+	
+	gf = g_file_new_for_path("/proc/self/exe");
+	gfi = g_file_query_info (gf,
+				 "standard::*",
+				 G_FILE_QUERY_INFO_NONE,
+				 NULL,
+				 &error2);
+
+	if(error2 != NULL)
+	{
+	    printf("error = %s\n",error2->message);
+
+	}
+	
+	gft = g_file_info_get_file_type(gfi);
+
+	printf("%s GFileType = %d\n",__FUNCTION__,gft);
+
+	if(gft != G_FILE_TYPE_SYMBOLIC_LINK)
+	{
+	    const char *exename = g_file_info_get_symlink_target(gfi);
+	    g_info("exename is (%s)\n",exename);
+
+	    if(strcmp(PROJECT_DIR"/803",exename)==0)
+	    {
+		g_info("Running in the build tree, using local resources.\n");
+	    }
+	    else
+	    {
+		g_info("Running from installed file, using shared resources.\n");
+	    }
+	}
+
+	g_object_unref(gfi);
+	g_object_unref(gf);
+    }
+
 
     // New command line option parsing....
 

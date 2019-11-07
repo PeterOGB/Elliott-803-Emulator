@@ -2025,7 +2025,7 @@ static Token savedStateTokens[] = {
 __attribute__((used))
 void WordGenInit(GtkBuilder *builder,
 		 GString *sharedPath,
-		 __attribute__((unused))  GString *userPath)
+		 GString *userPath)
 {
     GString *fileName = NULL;
     int width,height;
@@ -2048,7 +2048,7 @@ void WordGenInit(GtkBuilder *builder,
     gtk_window_set_default_size(GTK_WINDOW(WordGenWindow), width, height);
 
 
-   for(int n = 0; n < BUTTONTYPES; n++)
+    for(int n = 0; n < BUTTONTYPES; n++)
     {
 	error = NULL;
 	g_string_printf(fileName,"%sgraphics/%sDown.gif",sharedPath->str,gifFileNames[n]);
@@ -2068,7 +2068,7 @@ void WordGenInit(GtkBuilder *builder,
 	    g_error("Failed to read image file %s due to %s\n",fileName->str,error->message);
     }
    
-   g_string_free(fileName,TRUE);
+    g_string_free(fileName,TRUE);
     fileName = NULL;
 
     SoundEffectsDirectory = g_string_new(sharedPath->str);
@@ -2531,7 +2531,7 @@ void WordGenInit(GtkBuilder *builder,
     gtk_window_set_deletable(GTK_WINDOW(WordGenWindow),FALSE);
 
 
-    readConfigFile("KeyboardState",userPath,savedStateTokens);
+    //readConfigFile("KeyboardState",userPath,savedStateTokens);
 
 
     for(int row=0; row < ROWCOUNT; row += 1)

@@ -49,3 +49,20 @@ set(LIBS ${LIBS} ${ALSA_LIBRARIES})
 
 target_link_libraries(803 ${LIBS} -liberty -lm )
 
+#add_custom_target(
+#  Tarballs  ALL
+#  DEPENDS 803-Emulator.tgz
+#)
+
+#add_custom_command ( OUTPUT 803-Emulator.tgz 
+#  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/createTarballs.sh
+#  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+#  DEPENDS 803-Emulator)
+
+
+# THis is used to detect if the emulator is being run from witin the
+# build tree and then to choose where to get resources from .
+configure_file(
+    ${CMAKE_SOURCE_DIR}/config.h.in
+    ${CMAKE_BINARY_DIR}/config.h
+)

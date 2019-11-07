@@ -387,7 +387,7 @@ void ChargerInit(__attribute__((unused)) GtkBuilder *builder,
     gtk_window_set_resizable(GTK_WINDOW(window),FALSE);
 
     // Read config file (which will reposition the window).
-    readConfigFile("ChargerState",userPath,savedStateTokens);
+    //readConfigFile("ChargerState",userPath,savedStateTokens);
 
     // Wire up the battery charger
     connectWires(CHARGER_CONNECTED,ChargerConnected);
