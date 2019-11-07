@@ -74,7 +74,8 @@ static gboolean timerTick100(__attribute__((unused)) gpointer user_data)
     return  G_SOURCE_CONTINUE;
 }
 
-
+static gchar *coreFileName =  NULL;
+static gboolean updateCoreFile = FALSE;
 
 extern GIOChannel *traceChannel;
 
@@ -95,7 +96,7 @@ void EmulatorShutdown(void)
     WordGenTidy(configPath);
     HoursRunTidy(configPath);
     // TEMPREMOVEPTSTidy(configPath);
-    // TEMPREMOVE CPUTidy(configPath);
+    CpuTidy(configPath,coreFileName, updateCoreFile);
 /* TEMPREMOVE 
     if(traceChannel != NULL)
     {
@@ -109,12 +110,13 @@ void EmulatorShutdown(void)
     gtk_main_quit();
 }
 
-gchar *coreFileName =  NULL;
+
 
 static GOptionEntry entries[] =
 {
 
     { "corefile", 'c', 0, G_OPTION_ARG_FILENAME, &coreFileName, "Initial core store file", NULL },
+    { "updateCoreFile", 'u', 0, G_OPTION_ARG_NONE, &updateCoreFile, "Update the corefile on exit", NULL }, 
     { NULL }
 };
 
