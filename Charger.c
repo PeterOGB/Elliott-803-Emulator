@@ -217,7 +217,7 @@ static void MainsSupplyOff(__attribute__((unused)) unsigned int dummy)
 // Called 100 times/sec to model the bahaviour of the Voltage and Current  meters */
 static void updateCharger(__attribute__((unused)) unsigned int dummy)
 {
-    static int displayRate = 0;
+   
     double error,dt;
     static double Ierror;
     double C,R;
@@ -286,20 +286,14 @@ static void updateCharger(__attribute__((unused)) unsigned int dummy)
     error = Vop - VoltageReading;
     VoltageReading += error * KPvoltageMeter ;
 
+    // Only update display if something has changed
     if((fabs(VoltageReading-ShowingV)>0.1) || (fabs(CurrentMeterReading-ShowingI)>0.1))
     {
 	gtk_widget_queue_draw(meterDrawingArea);
 	ShowingV = VoltageReading;
 	ShowingI = CurrentMeterReading;
     }
-#if 0
-    // Only update display every other call.
-    if(displayRate++ == 5) 
-    {
-	displayRate = 0;
-	gtk_widget_queue_draw(meterDrawingArea);
-    }
-#endif
+
 }
 
 
