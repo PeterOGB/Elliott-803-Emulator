@@ -74,8 +74,8 @@ static gboolean timerTick100(__attribute__((unused)) gpointer user_data)
     return  G_SOURCE_CONTINUE;
 }
 
-static gchar *coreFileName =  NULL;
-static gboolean updateCoreFile = FALSE;
+static gchar *loadCoreFileName =  NULL;
+static gchar *saveCoreFileName =  NULL;
 
 extern GIOChannel *traceChannel;
 
@@ -96,7 +96,7 @@ void EmulatorShutdown(void)
     WordGenTidy(configPath);
     HoursRunTidy(configPath);
     // TEMPREMOVEPTSTidy(configPath);
-    CpuTidy(configPath,coreFileName, updateCoreFile);
+    CpuTidy(configPath,saveCoreFileName);
 /* TEMPREMOVE 
     if(traceChannel != NULL)
     {
@@ -115,8 +115,8 @@ void EmulatorShutdown(void)
 static GOptionEntry entries[] =
 {
 
-    { "corefile", 'c', 0, G_OPTION_ARG_FILENAME, &coreFileName, "Initial core store file", NULL },
-    { "updateCoreFile", 'u', 0, G_OPTION_ARG_NONE, &updateCoreFile, "Update the corefile on exit", NULL }, 
+    { "loadcorefile", 'l', 0, G_OPTION_ARG_FILENAME, &loadCoreFileName, "Load the core store from file.", NULL },
+    { "savecorefile", 's', 0, G_OPTION_ARG_FILENAME, &saveCoreFileName, "Save the core store to file.", NULL }, 
     { NULL }
 };
 
@@ -314,7 +314,8 @@ int main(int argc, char *argv[])
       exit (1);
     }
 
-    g_info("Core file set to %s\n",coreFileName);
+    if(loadCoreFileName != NULL)
+	g_info("Core file set to %s\n",loadCoreFileName);
 
 
 
@@ -334,7 +335,7 @@ int main(int argc, char *argv[])
 
     // Cpu must be set up before the keyboard so that the initial states of the
     // buttons can be sent 
-    CpuInit(builder,sharedPath,configPath,coreFileName);
+    CpuInit(builder,sharedPath,configPath,loadCoreFileName);
     
     HandsInit(builder,sharedPath,configPath);
     WordGenInit(builder,sharedPath,configPath);

@@ -1,6 +1,6 @@
 #pragma once
 
-void CpuTidy(__attribute__((unused)) GString *userPath,gchar *coreFileName,gboolean updateCoreFile);
+void CpuTidy(__attribute__((unused)) GString *userPath,gchar *coreFileName);
 
 void CpuInit( __attribute__((unused)) GtkBuilder *builder,
 	      __attribute__((unused)) GString *sharedPath,

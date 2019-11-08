@@ -199,53 +199,52 @@ static void CPU_sound(__attribute__((unused)) void *buffer,
 
 extern E803word *CoreStore;
 
-void CpuTidy(__attribute__((unused)) GString *userPath,gchar *coreFileName,gboolean updateCoreFile)
+void CpuTidy(__attribute__((unused)) GString *userPath,gchar *coreFileName)
 {
-    g_info("%s called updateCoreFile is %s\n",__FUNCTION__,updateCoreFile?"true":"false");
-    if((updateCoreFile == TRUE) && (coreFileName != NULL))
-    {
-	GString *CoreImageFileName = NULL;
-	GError *error = NULL;
-	GFile *gf;
-	GFileOutputStream *gfos;
-	gboolean writeOk;
-	gsize written;
+
+
+    GString *CoreImageFileName = NULL;
+    GError *error = NULL;
+    GFile *gf;
+    GFileOutputStream *gfos;
+    gboolean writeOk;
+    gsize written;
 	
-	CoreImageFileName = g_string_new(userPath->str);
-	if(coreFileName != NULL)
-	{
-	    g_string_append(CoreImageFileName,coreFileName);
-	}
-	else
-	{
-	    g_string_append(CoreImageFileName,"CoreImage");
-	}
+    CoreImageFileName = g_string_new(userPath->str);
+    if(coreFileName != NULL)
+    {
+	g_string_append(CoreImageFileName,coreFileName);
+    }
+    else
+    {
+	g_string_append(CoreImageFileName,"CoreImage");
+    }
 
-	gf = g_file_new_for_path(CoreImageFileName->str);
+    gf = g_file_new_for_path(CoreImageFileName->str);
 
-	gfos = g_file_replace (gf,
-			       NULL,
-			       TRUE,
-			       G_FILE_CREATE_NONE,
-			       NULL,
-			       &error);
+    gfos = g_file_replace (gf,
+			   NULL,
+			   TRUE,
+			   G_FILE_CREATE_NONE,
+			   NULL,
+			   &error);
 
-	writeOk = g_output_stream_write_all (G_OUTPUT_STREAM(gfos),
-					     CoreStore,
-					     8192 * sizeof(E803word),
-					     &written,
-					     NULL,
-					     &error);
+    writeOk = g_output_stream_write_all (G_OUTPUT_STREAM(gfos),
+					 CoreStore,
+					 8192 * sizeof(E803word),
+					 &written,
+					 NULL,
+					 &error);
 
-	g_output_stream_close (G_OUTPUT_STREAM(gfos),NULL,&error);
+    g_output_stream_close (G_OUTPUT_STREAM(gfos),NULL,&error);
              
 	
-	g_info("writeOk is %s\n",writeOk?"true":"false");
-	g_info("written = %zu\n",written);
+    g_info("writeOk is %s\n",writeOk?"true":"false");
+    g_info("written = %zu\n",written);
 
-	g_object_unref(gf);
+    g_object_unref(gf);
 	
-    }
+
 }
 
 
