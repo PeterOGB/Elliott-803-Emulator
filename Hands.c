@@ -1025,7 +1025,7 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
     {
 	//static int h = 0;
 	//printf("%d\n",h++);
-	rate = 50;
+	rate = 2;
     }
     else
     {
@@ -1567,7 +1567,8 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
 	    }
 	}
     }
-	
+if(rate == 0)
+{	
     switch(activeWindowId)
     {
 
@@ -1605,7 +1606,7 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
     default:
 	break;
     }
-
+}
 
 
     return TRUE;
