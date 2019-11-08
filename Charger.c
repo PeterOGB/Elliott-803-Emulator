@@ -221,6 +221,7 @@ static void updateCharger(__attribute__((unused)) unsigned int dummy)
     double error,dt;
     static double Ierror;
     double C,R;
+    static gdouble ShowingI=-1.0,ShowingV=-1.0;
 
     Ipunch = 0.0;
 
@@ -285,12 +286,20 @@ static void updateCharger(__attribute__((unused)) unsigned int dummy)
     error = Vop - VoltageReading;
     VoltageReading += error * KPvoltageMeter ;
 
+    if((fabs(VoltageReading-ShowingV)>0.1) || (fabs(CurrentMeterReading-ShowingI)>0.1))
+    {
+	gtk_widget_queue_draw(meterDrawingArea);
+	ShowingV = VoltageReading;
+	ShowingI = CurrentMeterReading;
+    }
+#if 0
     // Only update display every other call.
-    if(displayRate++ == 1) 
+    if(displayRate++ == 5) 
     {
 	displayRate = 0;
 	gtk_widget_queue_draw(meterDrawingArea);
     }
+#endif
 }
 
 
