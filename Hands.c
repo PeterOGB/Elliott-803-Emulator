@@ -1025,7 +1025,7 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
     {
 	//static int h = 0;
 	//printf("%d\n",h++);
-	rate = 2;
+	rate = 1;
     }
     else
     {
