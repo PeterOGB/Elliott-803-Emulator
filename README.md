@@ -34,5 +34,5 @@ If you run the emulator from the build directory with `./803` it will use the re
 that directory.  An "install" make target will be added later.
 
 
-![alt text](https://github.com/PeterOGB/Elliott-803-Emulator/doc/Beta1.png "First Release Components")
+![alt text](https://github.com/PeterOGB/Elliott-803-Emulator/blob/master/doc/Beta1.png "First Release Components")
 
