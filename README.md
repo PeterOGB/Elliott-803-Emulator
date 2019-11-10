@@ -23,7 +23,9 @@ Also the "cmake" application is needed.
 
 Runing 
 
-`cmake .
-make`
+```
+cmake .
+make
+```
 
 is all that is required !
