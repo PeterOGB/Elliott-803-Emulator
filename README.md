@@ -33,6 +33,7 @@ is all that is required to produce the executable !
 If you run the emulator from the build directory with `./803` it will use the resources in
 that directory.  An "install" make target will be added later.
 
+If all works correctly you should see four windows containing the Operators Console, Battery Charger, Contactor and Hours Run.
 
 ![alt text](https://github.com/PeterOGB/Elliott-803-Emulator/blob/master/doc/Beta1.png "First Release Components")
 

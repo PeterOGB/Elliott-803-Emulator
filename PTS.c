@@ -1,26 +1,64 @@
 // Cut down PTS that just implements the PLTS network interface
+#define G_LOG_USE_STRUCTURED
 
 #include <gtk/gtk.h>
 #include "PTS.h"
 #include "Wiring.h"
-
-
-
-
-
+#include "Logging.h"
 
 static gboolean initPLTS(void);
+static gboolean PLTSReaderOnline = FALSE;
+static unsigned int CLines,TRlines;
+static int onlineWr = 0;
+static gchar onlineBuffer[32];
+static unsigned char tapeRxBuffer[65536];
+static gsize  tapeRxBufferLength = 0;
+static gsize PLTStapePosition;
 
 static gboolean PTSF71 = FALSE;    // F71 and F74 signals in the PTS. 
 static gboolean PTSF74 = FALSE;
 
 static void F71changed(unsigned int value)
 {
+    static int onlineRd = 0;
     //printf("%s %u\n",__FUNCTION__,value);
     if(value == 1)
     {
 	PTSF71 = TRUE;
-	wiring(READY,1);
+	if(PLTSReaderOnline)
+	{
+	    if((CLines & 4096) == 4096)
+	    {
+		// Non-blocking so return runout if nothing in the circular buffer
+		if(onlineRd != onlineWr)
+		{
+		    TRlines = (unsigned int) onlineBuffer[onlineRd++];
+		    onlineRd &= 0x1F;
+		}
+		else
+		{   
+		    TRlines = 0;
+		}
+		wiring(READY,1);
+	    }
+	    else
+	    {
+		if(onlineRd != onlineWr)
+		{
+		    TRlines =(unsigned int) onlineBuffer[onlineRd++];
+		    onlineRd &= 0x1F;
+		    wiring(READY,1);
+		}
+	    }
+	}
+	else
+	{
+	    if(PLTStapePosition < tapeRxBufferLength)
+	    {
+		TRlines =  (unsigned int) tapeRxBuffer[PLTStapePosition++] & 0x1F; 
+		wiring(READY,1);
+	    }
+	}
     }
     else
     {
@@ -42,7 +80,7 @@ static void F74changed(unsigned int value)
     }
 }
 
-static unsigned int CLines;
+
 
 static void ClinesChanged(unsigned int value)
 {
@@ -51,8 +89,8 @@ static void ClinesChanged(unsigned int value)
 }
 
 
-static unsigned char tapeRxBuffer[65536];
-static int PLTStapePosition;
+
+
 static GIOChannel *peripheral_channel;
 static gboolean PLTSReaderEcho = FALSE;
 
@@ -67,13 +105,12 @@ static void ACTchanged(unsigned int value)
 	if(PTSF71)
 	{
 	    //wiring(TRLINES,tapeBuffer[counter++] & 0x1F);
-	    character = tapeRxBuffer[PLTStapePosition++] & 0x1F; 
-	    wiring(TRLINES,(unsigned int) character);
+	    //character = tapeRxBuffer[PLTStapePosition++] & 0x1F; 
+	    wiring(TRLINES,TRlines);
 	    wiring(READY,0);
 	    if(PLTSReaderEcho)
 	    {
-
-		character |= 0x20;
+		character = (char)TRlines | 0x20;
 		g_io_channel_write_chars(peripheral_channel,&character,1,&written,&error);
 		g_io_channel_flush(peripheral_channel,NULL);
 	    }
@@ -83,6 +120,7 @@ static void ACTchanged(unsigned int value)
 	    character = (CLines & 0x1F);
 	    g_io_channel_write_chars(peripheral_channel,&character,1,&written,&error);
 	    g_io_channel_flush(peripheral_channel,NULL);
+	    wiring(READY,0);
 	}
 	
     }
@@ -120,12 +158,11 @@ static GIOChannel *listening_channel;
 
 //static int PLTStapePosition;
 
-static gboolean PLTSReaderOnline = FALSE;
+
 static gsize tapeRxBlockLength,tapeRxOffset;
 
-//static int onlineRd = 0;
-static int onlineWr = 0;
-static gchar onlineBuffer[32];
+//
+
 //static unsigned char tapeRxBuffer[65536];
 
 static gboolean  process_message(GIOChannel *source,
@@ -177,6 +214,8 @@ static gboolean  process_message(GIOChannel *source,
 		    PLTStapePosition = 0;
 		    cmd = 0;
 		    offset = 0;
+		    tapeRxBufferLength = tapeRxOffset;
+		    g_info("Loaded %zu characters\n", tapeRxOffset);
 		    messageLength = 1;
 		    break;
 		case 0x84:
@@ -353,41 +392,37 @@ static gboolean initPLTS(void)
     struct sockaddr_in name; 
     socklen_t length;
     int listen_socket;
-    //char logMessage[100];
     int reuseaddr;
+
     /* Create socket with which to listen for connections from peripherals. */ 
     listen_socket = socket(AF_INET, SOCK_STREAM, 0); 
     if (listen_socket < 0)
     { 
-	perror("opening TCP socket for peripheral connections"); 
+	g_warning("opening TCP socket for peripheral connections\n"); 
 	return(FALSE); 
     } 
 	  
     reuseaddr = 1;
     if(setsockopt(listen_socket,SOL_SOCKET,SO_REUSEADDR,&reuseaddr,sizeof(reuseaddr)) == -1)
     {
-	printf("**** setsockopt FAILED *******\n");
+	g_warning("setsockopt FAILED\n");
     }
-
-
-
  
     /* Create name with wildcards. */ 
     name.sin_family = AF_INET; 
     name.sin_addr.s_addr = INADDR_ANY; 
-    name.sin_port = htons(7000); 
+    name.sin_port = htons(8038); 
     if (bind(listen_socket,(struct sockaddr *) &name, sizeof(name))) { 
-	perror(">>>>>>>>>>>>>>>>>>>>>> binding TCP socket <<<<<<<<<<<<<<<<<<<"); 
+	g_warning("binding TCP socket failed\n"); 
 	return(FALSE); 
     } 
     /* Find assigned port value and print it out. */ 
     length = sizeof(name); 
     if (getsockname(listen_socket,(struct sockaddr *) &name, &length)) { 
-	perror("getting socket name"); 
+	g_warning("getting socket name"); 
 	return(FALSE); 
     } 
-    printf("Listening for new network connections on port #%d\n", ntohs(name.sin_port)); 
- 
+    g_info("Listening for new network connections on port #%d\n", ntohs(name.sin_port)); 
   
     listening_channel = g_io_channel_unix_new(listen_socket);
 
@@ -397,7 +432,4 @@ static gboolean initPLTS(void)
     listen(listen_socket,1);
 
     return(TRUE);
-  
-
-
 }
