@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 2.8.0)
 PROJECT("803 Emulator" C)
 
 ADD_EXECUTABLE(803 Main.c Keyboard.c Hands.c Contactor.c Charger.c PowerCabinet.c Sound.c 
-  Cpu.c HoursRun.c Emulate.c PTS.c Wiring.c Common.c E803ops.c Logging.c fsm.c ) 
+  Cpu.c HoursRun.c Emulate.c PTS.c Plotter.c Wiring.c Common.c E803ops.c Logging.c fsm.c ) 
 
 SET(CMAKE_C_FLAGS "-std=gnu99  -g  -Wall -Wextra -Wunused -Wconversion"
 "-Wundef -Wcast-qual -Wmissing-prototypes "

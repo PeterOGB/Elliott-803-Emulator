@@ -995,6 +995,7 @@ void setEnterDelay(int n)
 //extern GtkWidget *ReaderDrawingArea;
 extern GtkWidget *WordGenDrawingArea;
 extern GtkWidget *ContactorDrawingArea;
+extern GtkWidget *PlotterDrawingArea;
 //extern GtkWidget *CreedKeyboardDrawingArea;
 //extern GtkWidget *DrawersDrawingArea;
 //extern GtkWidget *HandViewerDrawingArea;
@@ -1428,7 +1429,7 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
 	}
     }
 
-    if((activeWindowId == WORDGENWINDOW) || (activeWindowId == HANDVIEWERWINDOW) || (activeWindowId == PTSWINDOW))
+    if((activeWindowId == WORDGENWINDOW) || (activeWindowId == PLOTTERWINDOW) || (activeWindowId == PTSWINDOW))
     {
 	if((LeftHandInfo.Fsm->state != TRACKING_HAND) && (RightHandInfo.Fsm->state != TRACKING_HAND))
 	{
@@ -1581,8 +1582,8 @@ if(rate == 0)
 	break;
 
 	
-    case READERWINDOW:
-	// TEMPREMOVE gtk_widget_queue_draw(ReaderDrawingArea);
+    case PLOTTERWINDOW:
+	gtk_widget_queue_draw(PlotterDrawingArea);
 	break;
     case CREEDKEYBOARDWINDOW:
 	// TEMPREMOVE gtk_widget_queue_draw(CreedKeyboardDrawingArea);

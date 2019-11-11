@@ -36,6 +36,7 @@
 #include "Cpu.h"
 #include "HoursRun.h"
 #include "PTS.h"
+#include "Plotter.h"
 #include "Wiring.h"
 #include "Sound.h"
 
@@ -353,6 +354,8 @@ int main(int argc, char *argv[])
 // TEMPREMOVE    connectWires(MAINS_SUPPLY_OFF,testMainsOff);
     PTSInit(builder,sharedPath,configPath);
     HoursRunInit(builder,sharedPath,configPath);
+    PlotterInit(builder,sharedPath,configPath);
+
     
     gtk_builder_connect_signals (builder, NULL);
     g_object_unref (G_OBJECT (builder));
