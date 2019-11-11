@@ -1839,9 +1839,8 @@ static void setTRLines(unsigned int value)
 
 void fn71(void)
 {
-    //printf("%s Pre  Ready=%s",__FUNCTION__,Ready?"TRUE":"FALSE");
-    wiring(F71,1);    // Send F71 to PTS
-    //printf("%s Post Ready=%s",__FUNCTION__,Ready?"TRUE":"FALSE");
+    wiring(CLINES,IR&8191);
+    wiring(F71,1);    // Send F71 to PTS.  This will set READY if appropriate
 
     if(Ready)
     {
@@ -1902,11 +1901,12 @@ int F74punchAt;
 
 void fn74(void)
 {
+    wiring(CLINES,IR&8191);
     wiring(F74,1);
 
     if(Ready)
     {
-	wiring(CLINES,IR&0x1F);
+
 	wiring(ACT,1);
 	wiring(ACT,0);
 	wiring(F74,0);
