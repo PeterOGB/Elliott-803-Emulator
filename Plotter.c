@@ -9,14 +9,19 @@
 #include "Common.h"
 #include "fsm.h"
 
+
+extern int CPU_word_time_count;
+
 static GtkWidget *PlotterWindow;
 GtkWidget *PlotterDrawingArea;
 static GdkPixbuf *background_pixbuf;
 static GdkPixbuf *paper_pixbuf;
 static GdkPixbuf *knobPixbufs[9];
+static GdkPixbuf *carriage_pixbuf;
 int knobCount;
 gboolean plotterMoved = FALSE;
 static int drumFastMove = 0;
+static int plotterBusyUntil = 0;
 
 static guint32 exitTimeStamp;
 static gdouble LeftHandExitedAtX,LeftHandExitedAtY;
@@ -29,6 +34,7 @@ static gboolean deferedMotion = FALSE;
 static gdouble deferedMotionX,deferedMotionY;
 static GList *pressedKeys = NULL;
 static GdkSeat *seat = NULL;
+
 
 
 static struct knobInfo
@@ -408,6 +414,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     static cairo_surface_t *backgroundSurface = NULL;
     static cairo_t *backgroundSurfaceCr = NULL;
     static cairo_surface_t *drumSurface = NULL;
+    static cairo_surface_t *carriageSurface = NULL;
+     static cairo_t *carriageSurfaceCr = NULL;
     //static cairo_t *drumSurfaceCr = NULL;
     GtkAllocation  DrawingAreaAlloc;
     struct knobInfo *knob;
@@ -416,6 +424,13 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     if(firstCall)
     {
 	firstCall = FALSE;
+
+	carriageSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+						     64,64);
+	carriageSurfaceCr = cairo_create(carriageSurface);
+	gdk_cairo_set_source_pixbuf (carriageSurfaceCr, carriage_pixbuf ,0.0,0.0);
+	cairo_paint(carriageSurfaceCr);
+	
 	gtk_widget_get_allocation(drawingArea, &DrawingAreaAlloc);
 
 	// Create a surface and an associated context
@@ -485,13 +500,15 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     
     cairo_set_source_surface (cr, drumSurface ,40.0,yOffset+20.0-665.0+(835-(PenY/2))); // 
     cairo_rectangle(cr, 40.0, 20.0, 616.0, 330);
-
-    
     cairo_stroke_preserve(cr);
-
     cairo_fill(cr);
-//    cairo_paint(cr);
-    
+
+
+// Draw the carriage
+    cairo_set_source_surface(cr,carriageSurface,40.0+(PenX/2), 24.0+165-32.0);
+    cairo_rectangle(cr, 40.0+(PenX/2), 24.0+165-32.0, 64.0, 64.0);
+    cairo_stroke_preserve(cr);
+    cairo_fill(cr);
     
     if(InPlotterWindow)
 	DrawHandsNew(cr); 
@@ -842,7 +859,8 @@ static void F72changed(unsigned int value)
 	if((CLines & 7168) == 7168)
 	{
 	    PLOTTERF72 = TRUE;
-	    wiring(READY,1);
+	    if(CPU_word_time_count >= plotterBusyUntil)
+		wiring(READY,1);
 	}
     }
     else
@@ -895,16 +913,29 @@ static void ACTchanged(unsigned int value)
 		cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
 		cairo_set_line_width (drumSurfaceCr, 1);
 		cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
-		cairo_move_to (drumSurfaceCr, 0.5+(PenX/2),0.5+(PenY/2));
-		cairo_line_to (drumSurfaceCr, 0.5+(PenX/2),0.5+(PenY/2));
+		cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
+		cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
 		cairo_stroke (drumSurfaceCr);
 	
 	    }
-	    printf("(%x,%d)%d\n",PenX,PenY,PenY/2);
+	    //printf("(%x,%d)%d\n",PenX,PenY,PenY/2);
 	    plotterMoved = TRUE;
+
+	    if(CLines & 060)
+		plotterBusyUntil = 350;
+	    else
+		plotterBusyUntil = 11;
 	    
 	    wiring(READY,0);
 	}
+    }
+    else
+    {
+	if(PLOTTERF72)
+	{
+	    plotterBusyUntil += CPU_word_time_count;
+	}
+
     }
 }
 
@@ -965,6 +996,13 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
     gtk_window_set_default_size(GTK_WINDOW(PlotterWindow), width, height);
 
+    g_string_printf(fileName,"%sgraphics/carriage.png",sharedPath->str);
+    
+    carriage_pixbuf =
+	my_gdk_pixbuf_new_from_file(fileName->str);
+
+
+    
 
     for(n=0;n<9;n++)
     {
