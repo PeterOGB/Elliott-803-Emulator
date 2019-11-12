@@ -15,6 +15,8 @@ static GdkPixbuf *background_pixbuf;
 static GdkPixbuf *paper_pixbuf;
 static GdkPixbuf *knobPixbufs[9];
 int knobCount;
+gboolean plotterMoved = FALSE;
+static int drumFastMove = 0;
 
 static guint32 exitTimeStamp;
 static gdouble LeftHandExitedAtX,LeftHandExitedAtY;
@@ -45,7 +47,7 @@ static struct knobInfo
 
 static int PenX,PenY;
 static gboolean PenDown = TRUE;
-static cairo_t *paperSurfaceCr = NULL;
+static cairo_t *drumSurfaceCr = NULL;
 
 //void PlotterTidy()
 
@@ -392,7 +394,7 @@ on_PlotterDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
 #define PAPER_WIDE 616
 #define PAPER_HIGH 750
 #define DRUM_WIDE 616
-#define DRUM_HIGH 330
+#define DRUM_HIGH 1500
 
 
 
@@ -405,11 +407,11 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     static gboolean firstCall = TRUE;
     static cairo_surface_t *backgroundSurface = NULL;
     static cairo_t *backgroundSurfaceCr = NULL;
-    static cairo_surface_t *paperSurface = NULL;
-    //static cairo_t *paperSurfaceCr = NULL;
+    static cairo_surface_t *drumSurface = NULL;
+    //static cairo_t *drumSurfaceCr = NULL;
     GtkAllocation  DrawingAreaAlloc;
     struct knobInfo *knob;
-    static int counter = 0;
+    static int yOffset = 0;
 
     if(firstCall)
     {
@@ -430,14 +432,22 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	//gdk_pixbuf_fill (paper_pixbuf,0xFFFFFFFF);
 
 	
-	paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+	drumSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
 						  DRUM_WIDE,DRUM_HIGH);
 
-	paperSurfaceCr = cairo_create(paperSurface);
-	cairo_set_source_rgba(paperSurfaceCr,0.8,0.8,0.8,1.0);
-	//gdk_cairo_set_source_pixbuf (paperSurfaceCr, paper_pixbuf ,0.0,0.0);
-	cairo_paint(paperSurfaceCr);
+	drumSurfaceCr = cairo_create(drumSurface);
+	cairo_set_source_rgba(drumSurfaceCr,0.8,0.8,0.8,1.0);
+	cairo_paint(drumSurfaceCr);
+	cairo_set_source_rgba(drumSurfaceCr,1.0,1.0,1.0,1.0);
+	//cairo_rectangle(drumSurfaceCr, 50, 500, 368, 500);
+	cairo_rectangle(drumSurfaceCr, 154, 500, 200, 330);
+	cairo_stroke_preserve(drumSurfaceCr);
 	
+	cairo_fill(drumSurfaceCr);
+
+	cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
+	cairo_rectangle(drumSurfaceCr, 154, 500, 200, 330);
+	cairo_stroke(drumSurfaceCr);
     }
 
     // Check for any knobs that had their "changed" flag set and redraw them into the background
@@ -457,18 +467,30 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     }
 
     /*
-    cairo_set_source_rgba(paperSurfaceCr,0.0,0.0,0.0,1.0);
-    cairo_set_line_width (paperSurfaceCr, 1);
-    cairo_set_line_cap  (paperSurfaceCr, CAIRO_LINE_CAP_ROUND);
-    cairo_move_to (paperSurfaceCr, counter, 50.0); cairo_line_to (paperSurfaceCr, counter, 50.0);
-    cairo_stroke (paperSurfaceCr);
+    cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
+    cairo_set_line_width (drumSurfaceCr, 1);
+    cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to (drumSurfaceCr, counter, 50.0); cairo_line_to (drumSurfaceCr, counter, 50.0);
+    cairo_stroke (drumSurfaceCr);
     counter += 1;
     */
     
     cairo_set_source_surface (cr, backgroundSurface ,0.0,0.0);
     cairo_paint(cr);
-    cairo_set_source_surface (cr, paperSurface ,39.0,20.0+(600-(PenY/2)));
-    cairo_paint(cr);
+    
+    //cairo_set_source_surface (cr, drumSurface ,39.0,670); // 835-(PenY/2));
+    //cairo_rectangle(cr, 39.0, 20.0, 616.0-20.0, 330);
+
+    yOffset +=  5 * drumFastMove;
+    
+    cairo_set_source_surface (cr, drumSurface ,40.0,yOffset+20.0-665.0+(835-(PenY/2))); // 
+    cairo_rectangle(cr, 40.0, 20.0, 616.0, 330);
+
+    
+    cairo_stroke_preserve(cr);
+
+    cairo_fill(cr);
+//    cairo_paint(cr);
     
     
     if(InPlotterWindow)
@@ -870,13 +892,16 @@ static void ACTchanged(unsigned int value)
 	    if(PenDown)
 	    {
 		//printf("Pen at %d,%d\n",PenX,PenY);
-		cairo_set_source_rgba(paperSurfaceCr,0.0,0.0,0.0,1.0);
-		cairo_set_line_width (paperSurfaceCr, 1);
-		cairo_set_line_cap  (paperSurfaceCr, CAIRO_LINE_CAP_ROUND);
-		cairo_move_to (paperSurfaceCr, PenX/2,PenY/2); cairo_line_to (paperSurfaceCr, PenX/2,PenY/2);
-		cairo_stroke (paperSurfaceCr);
+		cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
+		cairo_set_line_width (drumSurfaceCr, 1);
+		cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
+		cairo_move_to (drumSurfaceCr, 0.5+(PenX/2),0.5+(PenY/2));
+		cairo_line_to (drumSurfaceCr, 0.5+(PenX/2),0.5+(PenY/2));
+		cairo_stroke (drumSurfaceCr);
+	
 	    }
-	    
+	    printf("(%x,%d)%d\n",PenX,PenY,PenY/2);
+	    plotterMoved = TRUE;
 	    
 	    wiring(READY,0);
 	}
@@ -893,6 +918,13 @@ static void carriageSingleKnobHandler(int state)
 {
     g_info("state = %d\n",state);
 }
+
+
+static void DrumFastKnobHandler(int state)
+{
+    drumFastMove = state -1;
+}
+
 
 static const char *knobPngFileNames[] =
 {
@@ -1054,7 +1086,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
-
+    knob->handler = DrumFastKnobHandler;
     knobNumber += 1;
 
 
@@ -1090,7 +1122,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knobCount = knobNumber;
 
     PenX = 100;
-    PenY = 700;
+    PenY = 1660;    // 1660 puts pen at 830 
     PenDown = TRUE;
 
     g_string_free(fileName,TRUE);

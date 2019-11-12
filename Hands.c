@@ -14,6 +14,7 @@
 // TEMPREMOVE #include "Reader.h"
 // TEMPREMOVE #include "CreedKeyboard.h"
 
+extern gboolean plotterMoved;
 
 static GdkPixbuf *RightHandEmpty_pixbuf;
 static GdkPixbuf *RightHandHoldingReel_pixbuf;
@@ -1569,7 +1570,15 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
 	}
     }
 if(rate == 0)
-{	
+{
+    if((activeWindowId != PLOTTERWINDOW) && (plotterMoved))
+    {
+	plotterMoved = FALSE;
+	gtk_widget_queue_draw(PlotterDrawingArea);
+    }
+	
+					    
+    
     switch(activeWindowId)
     {
 
@@ -1585,6 +1594,8 @@ if(rate == 0)
     case PLOTTERWINDOW:
 	gtk_widget_queue_draw(PlotterDrawingArea);
 	break;
+
+	
     case CREEDKEYBOARDWINDOW:
 	// TEMPREMOVE gtk_widget_queue_draw(CreedKeyboardDrawingArea);
 	break;
