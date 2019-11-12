@@ -898,7 +898,7 @@ on_WordGenDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
     return TRUE;
 }
 
-GdkRectangle ThreeFingerAreas[4] =
+static GdkRectangle ThreeFingerAreas[4] =
 {
     {116,144,122,24},
     {106,198,242,24},
@@ -907,7 +907,7 @@ GdkRectangle ThreeFingerAreas[4] =
    
 };
 
-GdkRectangle OneFingerAreas[10] =
+static GdkRectangle OneFingerAreas[10] =
 {
     {404,135,80,35},
     {521,135,80,35},
@@ -921,7 +921,7 @@ GdkRectangle OneFingerAreas[10] =
     {545,208,20,40}
 };
 
-GdkRectangle AllFingersAreas[1] =
+static GdkRectangle AllFingersAreas[1] =
 {
    {276,392,131,31} 
 };

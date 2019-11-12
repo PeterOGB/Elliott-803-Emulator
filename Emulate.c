@@ -1868,22 +1868,21 @@ int plotterAct = 0;
 
 void fn72(void)
 {
-#if 0
-  if(testReady(F72,IR&7680))
-  {
-//    Clines = (IR&0x3F);
-    setACT(F72,IR&7680);
-    if(B)
+    wiring(CLINES,IR&8191);
+    wiring(F72,1);
+
+    if(Ready)
     {
-      B = false;
+	wiring(ACT,1);
+	wiring(ACT,0);
+	wiring(F72,0);
+	B = false;
+    }
+    else
+    {
+	B = true;
     }
 
-  }
-  else
-  {
-    B = true;
-  }
-#endif
 }
 
 

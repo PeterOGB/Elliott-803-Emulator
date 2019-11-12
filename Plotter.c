@@ -12,6 +12,7 @@
 static GtkWidget *PlotterWindow;
 GtkWidget *PlotterDrawingArea;
 static GdkPixbuf *background_pixbuf;
+static GdkPixbuf *paper_pixbuf;
 static GdkPixbuf *knobPixbufs[9];
 int knobCount;
 
@@ -40,6 +41,11 @@ static struct knobInfo
     enum WiringEvent wire;
 
 } knobs[6];     /* There are 6 knobs on the Plotter */
+
+
+static int PenX,PenY;
+static gboolean PenDown = TRUE;
+static cairo_t *paperSurfaceCr = NULL;
 
 //void PlotterTidy()
 
@@ -382,7 +388,11 @@ on_PlotterDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
 }
 
 
-
+#define LINES_VISIBLE 330
+#define PAPER_WIDE 616
+#define PAPER_HIGH 750
+#define DRUM_WIDE 616
+#define DRUM_HIGH 330
 
 
 
@@ -393,10 +403,13 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 			    __attribute__((unused)) gpointer data)
 {
     static gboolean firstCall = TRUE;
-    static cairo_surface_t *surface = NULL;
-    static cairo_t *surfaceCr = NULL;
+    static cairo_surface_t *backgroundSurface = NULL;
+    static cairo_t *backgroundSurfaceCr = NULL;
+    static cairo_surface_t *paperSurface = NULL;
+    //static cairo_t *paperSurfaceCr = NULL;
     GtkAllocation  DrawingAreaAlloc;
     struct knobInfo *knob;
+    static int counter = 0;
 
     if(firstCall)
     {
@@ -404,13 +417,27 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	gtk_widget_get_allocation(drawingArea, &DrawingAreaAlloc);
 
 	// Create a surface and an associated context
-	surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+	backgroundSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
 			   DrawingAreaAlloc.width,DrawingAreaAlloc.height);
 
-	surfaceCr = cairo_create(surface);
+	backgroundSurfaceCr = cairo_create(backgroundSurface);
 
-	gdk_cairo_set_source_pixbuf (surfaceCr, background_pixbuf ,0.0,0);
-	cairo_paint(surfaceCr);
+	gdk_cairo_set_source_pixbuf (backgroundSurfaceCr, background_pixbuf ,0.0,0.0);
+	cairo_paint(backgroundSurfaceCr);
+
+
+	//paper_pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB,FALSE,8,PAPER_WIDE,PAPER_HIGH);
+	//gdk_pixbuf_fill (paper_pixbuf,0xFFFFFFFF);
+
+	
+	paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+						  DRUM_WIDE,DRUM_HIGH);
+
+	paperSurfaceCr = cairo_create(paperSurface);
+	cairo_set_source_rgba(paperSurfaceCr,0.8,0.8,0.8,1.0);
+	//gdk_cairo_set_source_pixbuf (paperSurfaceCr, paper_pixbuf ,0.0,0.0);
+	cairo_paint(paperSurfaceCr);
+	
     }
 
     // Check for any knobs that had their "changed" flag set and redraw them into the background
@@ -421,16 +448,28 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	{
 	    knob->changed = FALSE;
 	    if(knob->pixIds[knob->state] != -1)
-		gdk_cairo_set_source_pixbuf (surfaceCr,
+		gdk_cairo_set_source_pixbuf (backgroundSurfaceCr,
 					     knobPixbufs[knob->pixIds[knob->state]],
 					     knob->xpos,knob->ypos);
-	    cairo_paint (surfaceCr);
+	    cairo_paint (backgroundSurfaceCr);
 
 	}
     }
+
+    /*
+    cairo_set_source_rgba(paperSurfaceCr,0.0,0.0,0.0,1.0);
+    cairo_set_line_width (paperSurfaceCr, 1);
+    cairo_set_line_cap  (paperSurfaceCr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to (paperSurfaceCr, counter, 50.0); cairo_line_to (paperSurfaceCr, counter, 50.0);
+    cairo_stroke (paperSurfaceCr);
+    counter += 1;
+    */
     
-    cairo_set_source_surface (cr, surface ,0.0,0);
+    cairo_set_source_surface (cr, backgroundSurface ,0.0,0.0);
     cairo_paint(cr);
+    cairo_set_source_surface (cr, paperSurface ,39.0,20.0+(600-(PenY/2)));
+    cairo_paint(cr);
+    
     
     if(InPlotterWindow)
 	DrawHandsNew(cr); 
@@ -529,7 +568,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
     {
 	trackingHand->FingersPressed |= trackingHand->IndexFingerBit;
 	knob = knobs;
-	for(int knobNumber= 0;knobNumber < knobCount; knobNumber += 1,knob++)
+	for(int knobNumber= 0; knobNumber < knobCount; knobNumber += 1,knob++)
 	{
 	    left = knob->xpos;
 	    right = left + knob->width;
@@ -612,7 +651,7 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
     if( (trackingHand != NULL) && (trackingHand->showingHand == HAND_ONE_FINGER)  )
     {
 	knob = knobs;
-	for(int knobNumber = 0;knobNumber < knobCount; knobNumber += 1,knob++)
+	for(int knobNumber = 0; knobNumber < knobCount; knobNumber += 1,knob++)
 	{
 	    left = knob->xpos;
 	    right = left + knob->width;
@@ -670,7 +709,7 @@ void warpToFinger(GdkWindow *win,HandInfo *hand)
 }
 
 
-GdkRectangle OneFingerAreas[10];
+static GdkRectangle OneFingerAreas[10];
 
 
 
@@ -769,17 +808,79 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 
 
 // CPU interface functions
+
+static unsigned int CLines;
+static gboolean PLOTTERF72;
+
 static void F72changed(unsigned int value)
 {
-
+    //printf("%s %u\n",__FUNCTION__,value);
+    if(value == 1)
+    {
+	if((CLines & 7168) == 7168)
+	{
+	    PLOTTERF72 = TRUE;
+	    wiring(READY,1);
+	}
+    }
+    else
+    {
+	PLOTTERF72 = FALSE;
+    }
 }
 static void ClinesChanged(unsigned int value)
 {
-
+    CLines = value;
 }
 static void ACTchanged(unsigned int value)
 {
+    if(value == 1)
+    {
+	if(PLOTTERF72)
+	{
+	    
 
+	    if(CLines & 1)
+	    {
+		PenX += 1;
+		if(PenX > 1100) PenX = 1100;
+	    }
+	    if(CLines & 2)
+	    {
+		PenX -= 1;
+		if(PenX < 0) PenX = 0;
+	    }
+	    if(CLines & 4)
+	    {
+		PenY -= 1;
+	    }
+	    if(CLines & 8)
+	    {
+		PenY += 1;
+	    }
+	    if(CLines & 16)
+	    {
+		PenDown = FALSE;
+	    }
+	    if(CLines & 32)
+	    {
+		PenDown = TRUE;
+	    }
+
+	    if(PenDown)
+	    {
+		//printf("Pen at %d,%d\n",PenX,PenY);
+		cairo_set_source_rgba(paperSurfaceCr,0.0,0.0,0.0,1.0);
+		cairo_set_line_width (paperSurfaceCr, 1);
+		cairo_set_line_cap  (paperSurfaceCr, CAIRO_LINE_CAP_ROUND);
+		cairo_move_to (paperSurfaceCr, PenX/2,PenY/2); cairo_line_to (paperSurfaceCr, PenX/2,PenY/2);
+		cairo_stroke (paperSurfaceCr);
+	    }
+	    
+	    
+	    wiring(READY,0);
+	}
+    }
 }
 
 
@@ -987,6 +1088,10 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
     
     knobCount = knobNumber;
+
+    PenX = 100;
+    PenY = 700;
+    PenDown = TRUE;
 
     g_string_free(fileName,TRUE);
     fileName = NULL;
