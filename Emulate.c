@@ -76,6 +76,7 @@ bool *Conditions[] = {&ALWAYS,&NEGA,&Z,&OFLOW};
 
 /* Emulation variables */
 int32_t IR_saved;
+int CPU_word_time_count = 0;
 /* working space */
 E803word tmp;
 
@@ -89,7 +90,7 @@ int16_t CPUVolume = 0x100;
 
 
 /* The next two run since the emulator was started */ 
-unsigned int CPU_word_time_count = 0;
+//unsigned int CPU_word_time_count = 0;
 unsigned int CPU_word_time_stop = 1;
 /* The next one refers to the current emulation cycle */
 unsigned int word_times_done =  0;
@@ -221,6 +222,7 @@ void Emulate(int wordTimesToEmulate)
     
     while(wordTimesToEmulate--)
     {
+	CPU_word_time_count += 1;
 	if(CpuRunning)
 	{
 	    /* This is the heart of the emulation.  It fetches instructions and executes them. */
