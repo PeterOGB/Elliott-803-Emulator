@@ -1,21 +1,5 @@
-Move config files to ~/.803-Emulator
-Move shared filrs to /usr/local/share/803-Emulator
-Move glade file to /usr/local/share/803-Emulator/803-Emulator.glade
+Change finger over plotter manual button to move in and out not up and down.
 
+DM160 should go out when mains fails.
 
-
-First time startup:
-
-
-
-
-
-
-
-ERROR
-CRITICAL
-WARNING
-MESSAGE
-INFO
-DEBUG
 

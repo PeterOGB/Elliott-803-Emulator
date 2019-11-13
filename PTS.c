@@ -129,6 +129,31 @@ static void ACTchanged(unsigned int value)
 	    wiring(TRLINES,0);
 }
 
+static gboolean MainsOn = FALSE;
+static gboolean ChargerConnected = FALSE;
+
+static void mainsOn(__attribute__((unused)) unsigned int state)
+{
+    MainsOn = TRUE;
+    wiring(PTS24VOLTSON,MainsOn && ChargerConnected); 
+}
+static void mainsOff(__attribute__((unused)) unsigned int state)
+{
+    MainsOn = FALSE;
+    wiring(PTS24VOLTSON,MainsOn && ChargerConnected); 
+}
+
+
+static void chargerConnected(__attribute__((unused)) unsigned int state)
+{
+    ChargerConnected = TRUE;
+    wiring(PTS24VOLTSON,MainsOn && ChargerConnected); 
+}
+static void chargerDisconnected(__attribute__((unused)) unsigned int state)
+{
+    ChargerConnected = FALSE;
+    wiring(PTS24VOLTSON,MainsOn && ChargerConnected); 
+}
 
 __attribute__((used))
 void PTSInit( __attribute__((unused)) GtkBuilder *builder,
@@ -140,6 +165,10 @@ void PTSInit( __attribute__((unused)) GtkBuilder *builder,
     connectWires(ACT, ACTchanged);
     connectWires(CLINES,ClinesChanged);
 
+    connectWires(MAINS_SUPPLY_ON,mainsOn);
+    connectWires(MAINS_SUPPLY_OFF,mainsOff);
+    connectWires(CHARGER_CONNECTED,chargerConnected);
+    connectWires(CHARGER_DISCONNECTED,chargerDisconnected);
 
 
 

@@ -18,11 +18,16 @@ static GdkPixbuf *background_pixbuf;
 //static GdkPixbuf *paper_pixbuf;
 static GdkPixbuf *knobPixbufs[9];
 static GdkPixbuf *carriage_pixbuf;
+static GdkPixbuf *manualPixbufs[3];
 int knobCount;
 gboolean plotterMoved = FALSE;
 static int drumFastMove = 0;
 static int carriageFastMove = 0;
 static int plotterBusyUntil = 0;
+static gboolean PlotterPowerOn = FALSE;
+static gboolean PowerSwitchOn = FALSE;
+static gboolean PlotterManual = FALSE;
+static gboolean V24On = FALSE;
 
 static guint32 exitTimeStamp;
 static gdouble LeftHandExitedAtX,LeftHandExitedAtY;
@@ -49,7 +54,7 @@ static struct knobInfo
     gboolean changed;
     enum WiringEvent wire;
 
-} knobs[6];     /* There are 6 knobs on the Plotter */
+} knobs[7];     /* There are 6 knobs and one button on the Plotter */
 
 
 static int PenX,PenY;
@@ -426,7 +431,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     //static cairo_t *drumSurfaceCr = NULL;
     GtkAllocation  DrawingAreaAlloc;
     struct knobInfo *knob;
-    //static int yOffset = 0;
+    int topLine;
 
     if(firstCall)
     {
@@ -479,7 +484,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	//cairo_stroke(drumSurfaceCr);
 
 #if 0
-	cairo_set_line_width (drumSurfaceCr, 10);
+	cairo_set_line_width (drumSurfaceCr, 2);
 	cairo_set_source_rgba(drumSurfaceCr,0.0,1.0,0.0,1.0);
 	cairo_move_to(drumSurfaceCr,0.0,0.0);
 	cairo_line_to(drumSurfaceCr,DRUM_WIDE,0.0);
@@ -491,20 +496,18 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	cairo_stroke(drumSurfaceCr);
 	
 	cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
-	cairo_move_to(drumSurfaceCr,0.0,DRUM_HIGH+LINES_VISIBLE);
-	cairo_line_to(drumSurfaceCr,DRUM_WIDE,DRUM_HIGH+LINES_VISIBLE);
+	cairo_move_to(drumSurfaceCr,0.0,LINES_VISIBLE);
+	cairo_line_to(drumSurfaceCr,DRUM_WIDE,LINES_VISIBLE);
 	cairo_stroke(drumSurfaceCr);
 #endif
-
-
-
     }
 
 
     
 
     // Check for any knobs that had their "changed" flag set and red1aw them into the background
-    for(int knobNumber = 0; knobNumber < knobCount; knobNumber += 1)
+    // last knob is the manual switch
+    for(int knobNumber = 0; knobNumber < knobCount-1; knobNumber += 1)
     {
 	knob = &knobs[knobNumber];
 	if(knob->changed)
@@ -518,7 +521,19 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 
 	}
     }
+    // Draw manual button
+    {
+	int state;
+	knob = &knobs[knobCount-1];
+	state = (knob->state != 0) ?  1:0; 
+	if((state == 1) && V24On) state = 2;  // Light it up 
+	gdk_cairo_set_source_pixbuf (backgroundSurfaceCr,
+				     manualPixbufs[state],
+				     285.0,372.0);
+	cairo_paint (backgroundSurfaceCr);
+    }
 
+    
     /*
     cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
     cairo_set_line_width (drumSurfaceCr, 1);
@@ -534,10 +549,17 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     //cairo_set_source_surface (cr, drumSurface ,39.0,670); // 835-(PenY/2));
     //cairo_rectangle(cr, 39.0, 20.0, 616.0-20.0, 330);
 
-  
-    // Draw the part of the drum surface visible in the window
-    cairo_set_source_surface (cr, drumSurface ,DRUM_LEFT,DRUM_TOP+MIDDLE_LINE-(PenY/2)); //
+    // Set top line of the image
+    topLine = (PenY/2) - MIDDLE_LINE;
 
+    // If close to the top, use the duplicate at the bottom.
+    if((PenY/2)<MIDDLE_LINE)
+    {
+        topLine = DRUM_HIGH - (MIDDLE_LINE -(PenY/2));
+    }
+      
+    // Draw the part of the drum surface visible in the window
+    cairo_set_source_surface (cr, drumSurface ,DRUM_LEFT,-topLine+DRUM_TOP);
     
     cairo_rectangle(cr, DRUM_LEFT, DRUM_TOP,DRUM_WIDE, LINES_VISIBLE);
     cairo_stroke_preserve(cr);
@@ -703,12 +725,12 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		    if((FingerPressedAtX - left) >= (knob->width/2))
 		    {
 			if(knob->state < 2) knob->state += 1;
-			g_info("Right Hit button number %d %d ",knobNumber,knob->state);
+			//g_info("Right Hit button number %d %d ",knobNumber,knob->state);
 		    }
 		    else
 		    {
 			if(knob->state > 0) knob->state -= 1;
-			g_info("Left  Hit button number %d %d",knobNumber,knob->state);
+			//g_info("Left  Hit button number %d %d",knobNumber,knob->state);
 		    }
 		    knob->changed = TRUE;
 		    break;
@@ -716,20 +738,29 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		    if((FingerPressedAtX - left) >= (knob->width/2))
 		    {
 			if(knob->state < 2) knob->state = 2;
-			g_info("Right Hit button number %d %d ",knobNumber,knob->state);
+			//g_info("Right Hit button number %d %d ",knobNumber,knob->state);
 		    }
 		    else
 		    {
 			if(knob->state > 0) knob->state = 0;
-			g_info("Left  Hit button number %d %d",knobNumber,knob->state);
+			//g_info("Left  Hit button number %d %d",knobNumber,knob->state);
 		    }
 		    knob->changed = TRUE;
 		    break;
-
+		case 3:
 		    
+		    switch(knob->state)
+		    {
+		    case 0:
+			knob->state = 1;
 
-
-		    
+			break;
+		    case 1:
+			knob->state = 2;
+		    default:
+			break;
+		    }
+		    break;
 
 		default:
 		    break;
@@ -761,7 +792,7 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	return GDK_EVENT_STOP;
     }
 
-    g_info("Releaase\n");
+    //g_info("Releaase\n");
     
     trackingHand = updateHands(event->x,event->y,&FingerPressedAtX,&FingerPressedAtY);
     
@@ -784,6 +815,18 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 		case 2:
 		    knob->state = 1;
 		    knob->changed = TRUE;
+		    break;
+		case 3:
+		    
+		    switch(knob->state)
+		    {
+		    case 2:
+			knob->state = 0;
+			knob->changed = TRUE;
+			break;
+		    default:
+			break;
+		    }
 		    break;
 		default:
 		    break;
@@ -926,8 +969,20 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 
 // CPU interface functions
 
-static unsigned int CLines;
-static gboolean PLOTTERF72;
+static unsigned int CLines = 0;
+static gboolean PLOTTERF72 = FALSE;
+
+
+static void V24changed(unsigned int value)
+{
+    V24On = (value != 0);
+    plotterMoved = TRUE;  // Force a redraw
+    PlotterPowerOn = PowerSwitchOn && V24On;
+    if(!PlotterPowerOn)
+	PenDown = TRUE;
+    g_info("24 Volts %s\n",V24On ? "ON" : "OFF");
+}
+
 
 static void F72changed(unsigned int value)
 {
@@ -937,7 +992,7 @@ static void F72changed(unsigned int value)
 	if((CLines & 7168) == 7168)
 	{
 	    PLOTTERF72 = TRUE;
-	    if(CPU_word_time_count >= plotterBusyUntil)
+	    if( (CPU_word_time_count >= plotterBusyUntil) && !PlotterManual && PlotterPowerOn)
 		wiring(READY,1);
 	}
     }
@@ -953,14 +1008,30 @@ static void ClinesChanged(unsigned int value)
 
 static void wrapY(void)
 {
+
+    if(PenY <0)
+    {
+	PenY += (2*DRUM_HIGH);
+	g_info("Wrap 1 %d\n",PenY);
+    }
+
+    if(PenY > (2*DRUM_HIGH))
+    {
+	PenY -= (2*DRUM_HIGH);
+	g_info("Wrap 2 %d\n",PenY);
+    }
+#if 0    
     if(PenY<LINES_VISIBLE)    // PenY/2 < MIDDLE_LINE
     {
 	PenY += (2*DRUM_HIGH);
+	g_info("Wrap 1 %d\n",PenY);
     }
     else if((PenY/2) > (DRUM_HIGH+MIDDLE_LINE))   // PenY/2 > DRUM_HIGH+MIDDLE_LINE
     {
 	PenY -= (2*DRUM_HIGH);
-    } 
+	g_info("Wrap 2 %d\n",PenY);
+    }
+#endif
 }
 
 static void limitX(void)
@@ -986,6 +1057,7 @@ static void plotPoint(void)
     // Duplicate at bottom
     if((PenY/2)<=LINES_VISIBLE)
     {
+	cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
 	cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
 	cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
 	cairo_stroke (drumSurfaceCr);
@@ -1056,25 +1128,28 @@ static void ACTchanged(unsigned int value)
 // Called from TIMER100HZ wiring
 static void fastMovePen( __attribute__((unused)) unsigned int value)
 {
-    if(drumFastMove != 0)
+    if(PlotterPowerOn)
     {
-	PenY +=  drumFastMove;
-	wrapY();
-    }
-
-    if(carriageFastMove != 0)
-    {
-	PenX +=  carriageFastMove;
-	limitX();
-    }
-
-    if((drumFastMove != 0) || (carriageFastMove != 0))
-    {
-	if(PenDown)
+	if(drumFastMove != 0)
 	{
-	    plotPoint();
+	    PenY +=  drumFastMove;
+	    wrapY();
 	}
-	plotterMoved = TRUE;
+
+	if(carriageFastMove != 0)
+	{
+	    PenX +=  carriageFastMove;
+	    limitX();
+	}
+
+	if((drumFastMove != 0) || (carriageFastMove != 0))
+	{
+	    if(PenDown)
+	    {
+		plotPoint();
+	    }
+	    plotterMoved = TRUE;
+	}
     }
 }
 
@@ -1084,17 +1159,31 @@ static void fastMovePen( __attribute__((unused)) unsigned int value)
 static void powerKnobHandler(int state)
 {
     g_info("state = %d\n",state);
+    PowerSwitchOn = (state == 0);
+    // Use V24On as that is powered from the same 
+    PlotterPowerOn = PowerSwitchOn && V24On;
+    if(!PlotterPowerOn)
+	PenDown = TRUE;
+    plotterMoved = TRUE;  // Force a redraw
 }
-    
+
+static void manualHandler(int state)
+{
+    g_info("state = %d\n",state);
+    PlotterManual = !(state == 0) ;
+}
 static void carriageSingleKnobHandler(int state)
 {
-    PenX += state -1;
-    limitX();
-    if(PenDown)
+    if(PlotterPowerOn)
     {
-	plotPoint();
+	PenX += state -1;
+	limitX();
+	if(PenDown)
+	{
+	    plotPoint();
+	}
+	plotterMoved = TRUE;
     }
-    plotterMoved = TRUE;
 }
 static void CarraigeFastKnobHandler(int state)
 {
@@ -1102,24 +1191,29 @@ static void CarraigeFastKnobHandler(int state)
 }
 static void drumSingleKnobHandler(int state)
 {
-    PenY += state -1;
-    wrapY();
-    if(PenDown)
-    {
-	plotPoint();
+    if(PlotterPowerOn)
+    { 
+	PenY += state -1;
+	wrapY();
+	if(PenDown)
+	{
+	    plotPoint();
+	}
+	plotterMoved = TRUE;
     }
-    plotterMoved = TRUE;
 }
+
 static void DrumFastKnobHandler(int state)
 {
     drumFastMove = state -1;
 }
 static void penUpDownHandler(int state)
 {
-    g_info("state = %d\n",state);
-    if(state == 2) PenDown = FALSE;
-    else if(state == 0) PenDown = TRUE;
-	
+    if(PlotterPowerOn)
+    {
+	if(state == 2) PenDown = FALSE;
+	else if(state == 0) PenDown = TRUE;
+    }
 }
 
 
@@ -1130,6 +1224,12 @@ static const char *knobPngFileNames[] =
     "CalcompUpRight.png","CalcompDownRight.png",
     "CalcompManualInOff.png","CalcompManualInOn.png","CalcompManualOut.png"
 };
+
+static const char *manualPngFileNames[] =
+{
+    "CalcompManualOut.png","CalcompManualInOff.png","CalcompManualInOn.png"
+};
+
 
 
 
@@ -1178,6 +1278,17 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 	if(error != NULL)
 	    g_error("Failed to read image file %s due to %s\n",fileName->str,error->message);
     }
+
+    for(n=0;n<3;n++)
+    {
+	g_string_printf(fileName,"%sgraphics/%s",sharedPath->str,manualPngFileNames[n]);
+	manualPixbufs[n] = gdk_pixbuf_new_from_file(fileName->str,&error);
+
+	if(error != NULL)
+	    g_error("Failed to read image file %s due to %s\n",fileName->str,error->message);
+    }
+
+    
 
     knobNumber = 0;
 
@@ -1319,7 +1430,28 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     
     knobNumber += 1;
 
+/* Manual */
 
+    knob = &knobs[knobNumber];
+    
+    knob->type = 3;    // Press-press Toggle switch
+    knob->xpos = 285;
+    knob->ypos = 372;
+    knob->width = 48;
+    knob->height = 35;
+    knob->state = 0;
+    knob->pixIds[0] = 0;  knob->pixIds[1] = 1;  knob->pixIds[2] = 2;
+    knob->changed = FALSE;
+    knob->wire = 0;
+
+    switchArea = &OneFingerAreas[knobNumber];
+    switchArea->x = knob->xpos;
+    switchArea->y = knob->ypos;	
+    switchArea->width = knob->width;
+    switchArea->height = knob->height;
+    knob->handler = manualHandler;
+    
+    knobNumber += 1;
 
 
 
@@ -1340,6 +1472,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     connectWires(ACT, ACTchanged);
     connectWires(CLINES,ClinesChanged);
     connectWires(TIMER100HZ,fastMovePen);
+    connectWires(PTS24VOLTSON,V24changed);
 
     gtk_widget_show(PlotterWindow);
 }
