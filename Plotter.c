@@ -15,12 +15,13 @@ extern int CPU_word_time_count;
 static GtkWidget *PlotterWindow;
 GtkWidget *PlotterDrawingArea;
 static GdkPixbuf *background_pixbuf;
-static GdkPixbuf *paper_pixbuf;
+//static GdkPixbuf *paper_pixbuf;
 static GdkPixbuf *knobPixbufs[9];
 static GdkPixbuf *carriage_pixbuf;
 int knobCount;
 gboolean plotterMoved = FALSE;
 static int drumFastMove = 0;
+static int carriageFastMove = 0;
 static int plotterBusyUntil = 0;
 
 static guint32 exitTimeStamp;
@@ -533,16 +534,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     //cairo_set_source_surface (cr, drumSurface ,39.0,670); // 835-(PenY/2));
     //cairo_rectangle(cr, 39.0, 20.0, 616.0-20.0, 330);
 
-    PenY +=  10 * drumFastMove;
-
-    if(PenY<LINES_VISIBLE)    // PenY/2 < MIDDLE_LINE
-    {
-	PenY += (2*DRUM_HIGH);
-    }
-    else if((PenY/2) > (DRUM_HIGH+MIDDLE_LINE))   // PenY/2 > DRUM_HIGH+MIDDLE_LINE
-    {
-	PenY -= (2*DRUM_HIGH);
-    } 
+  
     // Draw the part of the drum surface visible in the window
     cairo_set_source_surface (cr, drumSurface ,DRUM_LEFT,DRUM_TOP+MIDDLE_LINE-(PenY/2)); //
 
@@ -552,9 +544,47 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     cairo_fill(cr);
 
 
+// Draw carraige support bars
+    {
+	gdouble grey;
+	cairo_set_line_width (cr, 1);
+	for(int bar = 0; bar < 4; bar ++)
+	{
+	    grey = bar / 3.0;
+	    grey = 1.0 - grey;
+	    cairo_set_source_rgba(cr,grey,grey,grey,1.0);
+	    cairo_move_to (cr,DRUM_LEFT           +0.5,-25 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
+	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,-25 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
+	    cairo_move_to (cr,DRUM_LEFT           +0.5,+26 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
+	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,+26 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
+	    //cairo_stroke(cr);
+	    //grey = 1.0 - grey;
+	    //cairo_set_source_rgba(cr,grey,grey,grey,1.0);
+	    cairo_move_to (cr,DRUM_LEFT           +0.5,-26 + DRUM_TOP + MIDDLE_LINE - bar + 0.5);
+	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,-26 + DRUM_TOP + MIDDLE_LINE - bar + 0.5);
+	    cairo_move_to (cr,DRUM_LEFT           +0.5,+25 + DRUM_TOP + MIDDLE_LINE - bar + 0.5);
+	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,+25 + DRUM_TOP + MIDDLE_LINE - bar + 0.5);
+	    cairo_stroke(cr);
+	}
+
+	grey = 0.8;
+	cairo_set_source_rgba(cr,grey,grey,grey,1.0);
+	cairo_move_to (cr,DRUM_LEFT           +0.5,DRUM_TOP + MIDDLE_LINE + 0.5);
+	cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,DRUM_TOP + MIDDLE_LINE + 0.5);
+	cairo_stroke(cr);
+	grey = 0.5;
+	cairo_set_source_rgba(cr,grey,grey,grey,1.0);
+	cairo_move_to (cr,DRUM_LEFT           +0.5, 1+DRUM_TOP + MIDDLE_LINE + 0.5);
+	cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5, 1+DRUM_TOP + MIDDLE_LINE + 0.5);
+	cairo_move_to (cr,DRUM_LEFT           +0.5,-1+DRUM_TOP + MIDDLE_LINE + 0.5);
+	cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,-1+DRUM_TOP + MIDDLE_LINE + 0.5);
+	cairo_stroke(cr);
+    }
+    
+
 // Draw the carriage
     cairo_set_source_surface(cr,carriageSurface,40.0+(PenX/2), DRUM_TOP+MIDDLE_LINE-32.0);
-    cairo_rectangle(cr, 40.0+(PenX/2), 24.0+165-32.0, 64.0, 64.0);
+    cairo_rectangle(cr, 40.0+(PenX/2),  DRUM_TOP+MIDDLE_LINE-32.0, 64.0, 64.0);
     cairo_stroke_preserve(cr);
     cairo_fill(cr);
     
@@ -920,31 +950,73 @@ static void ClinesChanged(unsigned int value)
 {
     CLines = value;
 }
+
+static void wrapY(void)
+{
+    if(PenY<LINES_VISIBLE)    // PenY/2 < MIDDLE_LINE
+    {
+	PenY += (2*DRUM_HIGH);
+    }
+    else if((PenY/2) > (DRUM_HIGH+MIDDLE_LINE))   // PenY/2 > DRUM_HIGH+MIDDLE_LINE
+    {
+	PenY -= (2*DRUM_HIGH);
+    } 
+}
+
+static void limitX(void)
+{
+	if(PenX > 1100)
+	{
+	    PenX = 1100;
+	} else 	if(PenX < 0)
+	{
+	    PenX = 0;
+	}
+}
+
+static void plotPoint(void)
+{
+    cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
+    cairo_set_line_width (drumSurfaceCr, 1);
+    cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
+    cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
+    cairo_stroke (drumSurfaceCr);
+
+    // Duplicate at bottom
+    if((PenY/2)<=LINES_VISIBLE)
+    {
+	cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
+	cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
+	cairo_stroke (drumSurfaceCr);
+    }
+}
+
 static void ACTchanged(unsigned int value)
 {
     if(value == 1)
     {
 	if(PLOTTERF72)
 	{
-	    
-
 	    if(CLines & 1)
 	    {
 		PenX += 1;
-		if(PenX > 1100) PenX = 1100;
+		limitX();
 	    }
 	    if(CLines & 2)
 	    {
 		PenX -= 1;
-		if(PenX < 0) PenX = 0;
+		limitX();
 	    }
 	    if(CLines & 4)
 	    {
 		PenY -= 1;
+		wrapY();
 	    }
 	    if(CLines & 8)
 	    {
 		PenY += 1;
+		wrapY();
 	    }
 	    if(CLines & 16)
 	    {
@@ -957,29 +1029,8 @@ static void ACTchanged(unsigned int value)
 
 	    if(PenDown)
 	    {
-		//printf("Pen at %d,%d\n",PenX,PenY);
-		cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
-		cairo_set_line_width (drumSurfaceCr, 1);
-		cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
-		cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
-		cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
-		cairo_stroke (drumSurfaceCr);
-
-
-		// Duplicate at bottom
-		if((PenY/2)<=LINES_VISIBLE)
-		{
-		    cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
-		    cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
-		    cairo_stroke (drumSurfaceCr);
-
-
-		}
-
-
-		
+		plotPoint();
 	    }
-	    //printf("(%x,%d)%d\n",PenX,PenY,PenY/2);
 	    plotterMoved = TRUE;
 
 	    if(CLines & 060)
@@ -1001,6 +1052,35 @@ static void ACTchanged(unsigned int value)
 }
 
 
+
+// Called from TIMER100HZ wiring
+static void fastMovePen( __attribute__((unused)) unsigned int value)
+{
+    if(drumFastMove != 0)
+    {
+	PenY +=  drumFastMove;
+	wrapY();
+    }
+
+    if(carriageFastMove != 0)
+    {
+	PenX +=  carriageFastMove;
+	limitX();
+    }
+
+    if((drumFastMove != 0) || (carriageFastMove != 0))
+    {
+	if(PenDown)
+	{
+	    plotPoint();
+	}
+	plotterMoved = TRUE;
+    }
+}
+
+
+
+// Handlers for knobs
 static void powerKnobHandler(int state)
 {
     g_info("state = %d\n",state);
@@ -1008,13 +1088,38 @@ static void powerKnobHandler(int state)
     
 static void carriageSingleKnobHandler(int state)
 {
-    g_info("state = %d\n",state);
+    PenX += state -1;
+    limitX();
+    if(PenDown)
+    {
+	plotPoint();
+    }
+    plotterMoved = TRUE;
 }
-
-
+static void CarraigeFastKnobHandler(int state)
+{
+    carriageFastMove = state -1;
+}
+static void drumSingleKnobHandler(int state)
+{
+    PenY += state -1;
+    wrapY();
+    if(PenDown)
+    {
+	plotPoint();
+    }
+    plotterMoved = TRUE;
+}
 static void DrumFastKnobHandler(int state)
 {
     drumFastMove = state -1;
+}
+static void penUpDownHandler(int state)
+{
+    g_info("state = %d\n",state);
+    if(state == 2) PenDown = FALSE;
+    else if(state == 0) PenDown = TRUE;
+	
 }
 
 
@@ -1117,6 +1222,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    knob->handler = CarraigeFastKnobHandler;
 
     knobNumber += 1;
 
@@ -1162,6 +1268,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    knob->handler = drumSingleKnobHandler;
 
     knobNumber += 1;
 
@@ -1208,7 +1315,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
-
+    knob->handler = penUpDownHandler;
+    
     knobNumber += 1;
 
 
@@ -1231,6 +1339,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     connectWires(F72, F72changed);
     connectWires(ACT, ACTchanged);
     connectWires(CLINES,ClinesChanged);
+    connectWires(TIMER100HZ,fastMovePen);
 
     gtk_widget_show(PlotterWindow);
 }
