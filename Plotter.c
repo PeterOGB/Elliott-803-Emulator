@@ -396,11 +396,17 @@ on_PlotterDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
 }
 
 
+// These are all in pixels which is half resolution
 #define LINES_VISIBLE 330
-#define PAPER_WIDE 616
-#define PAPER_HIGH 750
+#define MIDDLE_LINE 165
+#define PAPER_WIDE 400
+#define PAPER_HIGH 400
+#define PAPER_LEFT 50
+#define PAPER_TOP 200
 #define DRUM_WIDE 616
-#define DRUM_HIGH 1500
+#define DRUM_HIGH 750
+#define DRUM_LEFT 39.0
+#define DRUM_TOP 18.0
 
 
 
@@ -419,21 +425,22 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     //static cairo_t *drumSurfaceCr = NULL;
     GtkAllocation  DrawingAreaAlloc;
     struct knobInfo *knob;
-    static int yOffset = 0;
+    //static int yOffset = 0;
 
     if(firstCall)
     {
 	firstCall = FALSE;
 
+	// Create surface for the carriage 
 	carriageSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
 						     64,64);
 	carriageSurfaceCr = cairo_create(carriageSurface);
 	gdk_cairo_set_source_pixbuf (carriageSurfaceCr, carriage_pixbuf ,0.0,0.0);
 	cairo_paint(carriageSurfaceCr);
-	
-	gtk_widget_get_allocation(drawingArea, &DrawingAreaAlloc);
 
-	// Create a surface and an associated context
+	// Create a surface and an associated context for whole window
+	gtk_widget_get_allocation(drawingArea, &DrawingAreaAlloc);
+	
 	backgroundSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
 			   DrawingAreaAlloc.width,DrawingAreaAlloc.height);
 
@@ -443,29 +450,59 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	cairo_paint(backgroundSurfaceCr);
 
 
-	//paper_pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB,FALSE,8,PAPER_WIDE,PAPER_HIGH);
-	//gdk_pixbuf_fill (paper_pixbuf,0xFFFFFFFF);
-
-	
+	// Create surface for the drum
 	drumSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-						  DRUM_WIDE,DRUM_HIGH);
+						  DRUM_WIDE,DRUM_HIGH+LINES_VISIBLE);
 
 	drumSurfaceCr = cairo_create(drumSurface);
+	// Set to grey (and should draw sprockets)
 	cairo_set_source_rgba(drumSurfaceCr,0.8,0.8,0.8,1.0);
 	cairo_paint(drumSurfaceCr);
+
+	// Add a piece of white paper
 	cairo_set_source_rgba(drumSurfaceCr,1.0,1.0,1.0,1.0);
-	//cairo_rectangle(drumSurfaceCr, 50, 500, 368, 500);
-	cairo_rectangle(drumSurfaceCr, 154, 500, 200, 330);
+	cairo_rectangle(drumSurfaceCr, PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
 	cairo_stroke_preserve(drumSurfaceCr);
-	
 	cairo_fill(drumSurfaceCr);
 
-	cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
-	cairo_rectangle(drumSurfaceCr, 154, 500, 200, 330);
+	// Add duplicate at bottom of surface
+	cairo_set_source_rgba(drumSurfaceCr,1.0,1.0,1.0,1.0);
+	cairo_rectangle(drumSurfaceCr, PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
+	cairo_stroke_preserve(drumSurfaceCr);
+	cairo_fill(drumSurfaceCr);
+	
+
+	// Red outline for testing 
+	//cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
+	//cairo_rectangle(drumSurfaceCr,PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
+	//cairo_stroke(drumSurfaceCr);
+
+#if 0
+	cairo_set_line_width (drumSurfaceCr, 10);
+	cairo_set_source_rgba(drumSurfaceCr,0.0,1.0,0.0,1.0);
+	cairo_move_to(drumSurfaceCr,0.0,0.0);
+	cairo_line_to(drumSurfaceCr,DRUM_WIDE,0.0);
 	cairo_stroke(drumSurfaceCr);
+
+	cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,1.0,1.0);
+	cairo_move_to(drumSurfaceCr,0.0,DRUM_HIGH);
+	cairo_line_to(drumSurfaceCr,DRUM_WIDE,DRUM_HIGH);
+	cairo_stroke(drumSurfaceCr);
+	
+	cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
+	cairo_move_to(drumSurfaceCr,0.0,DRUM_HIGH+LINES_VISIBLE);
+	cairo_line_to(drumSurfaceCr,DRUM_WIDE,DRUM_HIGH+LINES_VISIBLE);
+	cairo_stroke(drumSurfaceCr);
+#endif
+
+
+
     }
 
-    // Check for any knobs that had their "changed" flag set and redraw them into the background
+
+    
+
+    // Check for any knobs that had their "changed" flag set and red1aw them into the background
     for(int knobNumber = 0; knobNumber < knobCount; knobNumber += 1)
     {
 	knob = &knobs[knobNumber];
@@ -496,16 +533,27 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     //cairo_set_source_surface (cr, drumSurface ,39.0,670); // 835-(PenY/2));
     //cairo_rectangle(cr, 39.0, 20.0, 616.0-20.0, 330);
 
-    yOffset +=  5 * drumFastMove;
+    PenY +=  10 * drumFastMove;
+
+    if(PenY<LINES_VISIBLE)    // PenY/2 < MIDDLE_LINE
+    {
+	PenY += (2*DRUM_HIGH);
+    }
+    else if((PenY/2) > (DRUM_HIGH+MIDDLE_LINE))   // PenY/2 > DRUM_HIGH+MIDDLE_LINE
+    {
+	PenY -= (2*DRUM_HIGH);
+    } 
+    // Draw the part of the drum surface visible in the window
+    cairo_set_source_surface (cr, drumSurface ,DRUM_LEFT,DRUM_TOP+MIDDLE_LINE-(PenY/2)); //
+
     
-    cairo_set_source_surface (cr, drumSurface ,40.0,yOffset+20.0-665.0+(835-(PenY/2))); // 
-    cairo_rectangle(cr, 40.0, 20.0, 616.0, 330);
+    cairo_rectangle(cr, DRUM_LEFT, DRUM_TOP,DRUM_WIDE, LINES_VISIBLE);
     cairo_stroke_preserve(cr);
     cairo_fill(cr);
 
 
 // Draw the carriage
-    cairo_set_source_surface(cr,carriageSurface,40.0+(PenX/2), 24.0+165-32.0);
+    cairo_set_source_surface(cr,carriageSurface,40.0+(PenX/2), DRUM_TOP+MIDDLE_LINE-32.0);
     cairo_rectangle(cr, 40.0+(PenX/2), 24.0+165-32.0, 64.0, 64.0);
     cairo_stroke_preserve(cr);
     cairo_fill(cr);
@@ -916,7 +964,20 @@ static void ACTchanged(unsigned int value)
 		cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
 		cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
 		cairo_stroke (drumSurfaceCr);
-	
+
+
+		// Duplicate at bottom
+		if((PenY/2)<=LINES_VISIBLE)
+		{
+		    cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
+		    cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
+		    cairo_stroke (drumSurfaceCr);
+
+
+		}
+
+
+		
 	    }
 	    //printf("(%x,%d)%d\n",PenX,PenY,PenY/2);
 	    plotterMoved = TRUE;
@@ -1160,7 +1221,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knobCount = knobNumber;
 
     PenX = 100;
-    PenY = 1660;    // 1660 puts pen at 830 
+    PenY = (PAPER_TOP+PAPER_HIGH);    // 1660 puts pen at 830 
     PenDown = TRUE;
 
     g_string_free(fileName,TRUE);
