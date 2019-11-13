@@ -19,7 +19,7 @@ static GdkPixbuf *background_pixbuf;
 static GdkPixbuf *knobPixbufs[9];
 static GdkPixbuf *carriage_pixbuf;
 static GdkPixbuf *manualPixbufs[3];
-int knobCount;
+int knobCount,knobCount2;
 gboolean plotterMoved = FALSE;
 static int drumFastMove = 0;
 static int carriageFastMove = 0;
@@ -41,8 +41,9 @@ static gdouble deferedMotionX,deferedMotionY;
 static GList *pressedKeys = NULL;
 static GdkSeat *seat = NULL;
 
-
-
+static GdkRectangle OneFingerAreas[20];
+static GdkRectangle PaperArea;
+static gboolean PaperLoaded = FALSE; 
 static struct knobInfo
 {
     int type;
@@ -54,12 +55,13 @@ static struct knobInfo
     gboolean changed;
     enum WiringEvent wire;
 
-} knobs[7];     /* There are 6 knobs and one button on the Plotter */
+} knobs[20];     /* There are six knobs and one button on the Plotter */
+                 /* Plus three paper areas */
 
 
 static int PenX,PenY;
 static gboolean PenDown = TRUE;
-static cairo_t *drumSurfaceCr = NULL;
+static cairo_t *visibleSurfaceCr = NULL;
 
 //void PlotterTidy()
 
@@ -425,7 +427,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     static gboolean firstCall = TRUE;
     static cairo_surface_t *backgroundSurface = NULL;
     static cairo_t *backgroundSurfaceCr = NULL;
-    static cairo_surface_t *drumSurface = NULL;
+    static cairo_surface_t *visibleSurface = NULL;
     static cairo_surface_t *carriageSurface = NULL;
      static cairo_t *carriageSurfaceCr = NULL;
     //static cairo_t *drumSurfaceCr = NULL;
@@ -457,48 +459,44 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 
 
 	// Create surface for the drum
-	drumSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+	visibleSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
 						  DRUM_WIDE,DRUM_HIGH+LINES_VISIBLE);
 
-	drumSurfaceCr = cairo_create(drumSurface);
+	visibleSurfaceCr = cairo_create(visibleSurface);
 	// Set to grey (and should draw sprockets)
-	cairo_set_source_rgba(drumSurfaceCr,0.8,0.8,0.8,1.0);
-	cairo_paint(drumSurfaceCr);
-
+	cairo_set_source_rgba(visibleSurfaceCr,0.8,0.8,0.8,1.0);
+	cairo_paint(visibleSurfaceCr);
+#if 0
 	// Add a piece of white paper
-	cairo_set_source_rgba(drumSurfaceCr,1.0,1.0,1.0,1.0);
-	cairo_rectangle(drumSurfaceCr, PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
-	cairo_stroke_preserve(drumSurfaceCr);
-	cairo_fill(drumSurfaceCr);
+	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	cairo_rectangle(visibleSurfaceCr, PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
+	cairo_stroke_preserve(visibleSurfaceCr);
+	cairo_fill(visibleSurfaceCr);
 
 	// Add duplicate at bottom of surface
-	cairo_set_source_rgba(drumSurfaceCr,1.0,1.0,1.0,1.0);
-	cairo_rectangle(drumSurfaceCr, PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
-	cairo_stroke_preserve(drumSurfaceCr);
-	cairo_fill(drumSurfaceCr);
-	
+	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	cairo_rectangle(visibleSurfaceCr, PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
+	cairo_stroke_preserve(visibleSurfaceCr);
+	cairo_fill(visibleSurfaceCr);
+#endif	
 
-	// Red outline for testing 
-	//cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
-	//cairo_rectangle(drumSurfaceCr,PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
-	//cairo_stroke(drumSurfaceCr);
 
 #if 0
-	cairo_set_line_width (drumSurfaceCr, 2);
-	cairo_set_source_rgba(drumSurfaceCr,0.0,1.0,0.0,1.0);
-	cairo_move_to(drumSurfaceCr,0.0,0.0);
-	cairo_line_to(drumSurfaceCr,DRUM_WIDE,0.0);
-	cairo_stroke(drumSurfaceCr);
+	cairo_set_line_width (visibleSurfaceCr, 2);
+	cairo_set_source_rgba(visibleSurfaceCr,0.0,1.0,0.0,1.0);
+	cairo_move_to(visibleSurfaceCr,0.0,0.0);
+	cairo_line_to(visibleSurfaceCr,DRUM_WIDE,0.0);
+	cairo_stroke(visibleSurfaceCr);
 
-	cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,1.0,1.0);
-	cairo_move_to(drumSurfaceCr,0.0,DRUM_HIGH);
-	cairo_line_to(drumSurfaceCr,DRUM_WIDE,DRUM_HIGH);
-	cairo_stroke(drumSurfaceCr);
+	cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,1.0,1.0);
+	cairo_move_to(visibleSurfaceCr,0.0,DRUM_HIGH);
+	cairo_line_to(visibleSurfaceCr,DRUM_WIDE,DRUM_HIGH);
+	cairo_stroke(visibleSurfaceCr);
 	
-	cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
-	cairo_move_to(drumSurfaceCr,0.0,LINES_VISIBLE);
-	cairo_line_to(drumSurfaceCr,DRUM_WIDE,LINES_VISIBLE);
-	cairo_stroke(drumSurfaceCr);
+	cairo_set_source_rgba(visibleSurfaceCr,1.0,0.0,0.0,1.0);
+	cairo_move_to(visibleSurfaceCr,0.0,LINES_VISIBLE);
+	cairo_line_to(visibleSurfaceCr,DRUM_WIDE,LINES_VISIBLE);
+	cairo_stroke(visibleSurfaceCr);
 #endif
     }
 
@@ -559,7 +557,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     }
       
     // Draw the part of the drum surface visible in the window
-    cairo_set_source_surface (cr, drumSurface ,DRUM_LEFT,-topLine+DRUM_TOP);
+    cairo_set_source_surface (cr, visibleSurface ,DRUM_LEFT,-topLine+DRUM_TOP);
     
     cairo_rectangle(cr, DRUM_LEFT, DRUM_TOP,DRUM_WIDE, LINES_VISIBLE);
     cairo_stroke_preserve(cr);
@@ -694,6 +692,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
     HandInfo *trackingHand;
     struct knobInfo *knob;
     int top,bottom,left,right;
+    GdkRectangle *OneFingerArea;
     
     if(event->button == 3)
     {
@@ -769,6 +768,24 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		break;
 	    }
  
+	}
+	for(int areaNumber= knobCount; areaNumber < knobCount2; areaNumber += 1)
+	{
+	    OneFingerArea = &OneFingerAreas[areaNumber];
+	    left = OneFingerArea->x;
+	    right = left + OneFingerArea->width;
+	    top = OneFingerArea->y;
+	    bottom = top + OneFingerArea->height;
+
+	    if((FingerPressedAtX >= left) && (FingerPressedAtX <= right) &&
+	       (FingerPressedAtY >= top) && (FingerPressedAtY <= bottom))
+	    {
+		g_info("Paper area hit\n");
+		if(knobs[areaNumber].handler != NULL) (knobs[areaNumber].handler)(knob->state);
+	    }
+	    
+
+
 	}
 
 
@@ -869,7 +886,7 @@ void warpToFinger(GdkWindow *win,HandInfo *hand)
 }
 
 
-static GdkRectangle OneFingerAreas[10];
+
 
 
 
@@ -891,7 +908,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     showing = HAND_EMPTY;
     
 
-    for(n=0;n<knobCount;n++)
+    for(n=0;n<knobCount2;n++)
     {
 	if( (ix >= OneFingerAreas[n].x) &&
 	    (ix <= (OneFingerAreas[n].x+OneFingerAreas[n].width)) &&
@@ -986,7 +1003,6 @@ static void V24changed(unsigned int value)
 
 static void F72changed(unsigned int value)
 {
-    //printf("%s %u\n",__FUNCTION__,value);
     if(value == 1)
     {
 	if((CLines & 7168) == 7168)
@@ -1020,18 +1036,6 @@ static void wrapY(void)
 	PenY -= (2*DRUM_HIGH);
 	g_info("Wrap 2 %d\n",PenY);
     }
-#if 0    
-    if(PenY<LINES_VISIBLE)    // PenY/2 < MIDDLE_LINE
-    {
-	PenY += (2*DRUM_HIGH);
-	g_info("Wrap 1 %d\n",PenY);
-    }
-    else if((PenY/2) > (DRUM_HIGH+MIDDLE_LINE))   // PenY/2 > DRUM_HIGH+MIDDLE_LINE
-    {
-	PenY -= (2*DRUM_HIGH);
-	g_info("Wrap 2 %d\n",PenY);
-    }
-#endif
 }
 
 static void limitX(void)
@@ -1047,21 +1051,40 @@ static void limitX(void)
 
 static void plotPoint(void)
 {
-    cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
-    cairo_set_line_width (drumSurfaceCr, 1);
-    cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
-    cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
-    cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2));
-    cairo_stroke (drumSurfaceCr);
+    gdouble halfX,halfY;
+    halfX = 32.5+PenX/2;
+    halfY = PenY/2;
+	
+    cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,1.0);
+    cairo_set_line_width (visibleSurfaceCr, 1);
+    cairo_set_line_cap  (visibleSurfaceCr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to (visibleSurfaceCr, halfX,0.5+(halfY));
+    cairo_line_to (visibleSurfaceCr, halfX,0.5+(halfY));
+    cairo_stroke (visibleSurfaceCr);
 
     // Duplicate at bottom
-    if((PenY/2)<=LINES_VISIBLE)
+    if((halfY)<=LINES_VISIBLE)
     {
-	cairo_set_source_rgba(drumSurfaceCr,1.0,0.0,0.0,1.0);
-	cairo_move_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
-	cairo_line_to (drumSurfaceCr, 32.5+(PenX/2),0.5+(PenY/2)+DRUM_HIGH);
-	cairo_stroke (drumSurfaceCr);
+	cairo_set_source_rgba(visibleSurfaceCr,1.0,0.0,0.0,1.0);
+	cairo_move_to (visibleSurfaceCr, halfX,0.5+(halfY)+DRUM_HIGH);
+	cairo_line_to (visibleSurfaceCr, halfX,0.5+(halfY)+DRUM_HIGH);
+	cairo_stroke (visibleSurfaceCr);
     }
+
+    if((halfX >= PaperArea.x) && (halfX <= (PaperArea.x+PaperArea.width)) &&
+       (halfY >= PaperArea.y) && (halfY <= (PaperArea.y+PaperArea.height)))
+    {
+	printf("ON  Paper\n");
+
+
+    }
+    else
+    {
+	printf("OFF Paper\n");
+    }
+
+
+
 }
 
 static void ACTchanged(unsigned int value)
@@ -1156,6 +1179,31 @@ static void fastMovePen( __attribute__((unused)) unsigned int value)
 
 
 // Handlers for knobs
+
+static void squarePaperHandler(__attribute__((unused)) int state)
+{
+    static GdkRectangle paper = { PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH};
+    g_info("squarePaperHandler\n");
+
+	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	cairo_rectangle(visibleSurfaceCr, PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
+	cairo_stroke_preserve(visibleSurfaceCr);
+	cairo_fill(visibleSurfaceCr);
+
+	// Add duplicate at bottom of surface
+	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	cairo_rectangle(visibleSurfaceCr, PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
+	cairo_stroke_preserve(visibleSurfaceCr);
+	cairo_fill(visibleSurfaceCr);
+
+	PaperLoaded = TRUE;
+	PaperArea = paper;
+    
+}
+
+
+
+
 static void powerKnobHandler(int state)
 {
     g_info("state = %d\n",state);
@@ -1453,12 +1501,21 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     
     knobNumber += 1;
 
-
-
-
-
-    
     knobCount = knobNumber;
+
+    /* Square Paper Area */
+    knob = &knobs[knobNumber];
+    switchArea = &OneFingerAreas[knobNumber];
+    switchArea->x = 584;
+    switchArea->y = 378;	
+    switchArea->width = 90;
+    switchArea->height = 90;
+    knob->handler = squarePaperHandler;
+
+    knobNumber += 1;
+
+    knobCount2 = knobNumber;
+    
 
     PenX = 100;
     PenY = (PAPER_TOP+PAPER_HIGH);    // 1660 puts pen at 830 
