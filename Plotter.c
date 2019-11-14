@@ -12,12 +12,13 @@
 
 extern int CPU_word_time_count;
 
-static GtkWidget *PlotterWindow;
-GtkWidget *PlotterDrawingArea;
-static GdkPixbuf *background_pixbuf;
-//static GdkPixbuf *paper_pixbuf;
+static GtkWidget *PlotterWindow = NULL;
+GtkWidget *PlotterDrawingArea = NULL;
+static GdkPixbuf *background_pixbuf = NULL;
+
 static GdkPixbuf *knobPixbufs[9];
 static GdkPixbuf *carriage_pixbuf;
+static GdkPixbuf *drum_pixbuf;
 static GdkPixbuf *manualPixbufs[3];
 int knobCount,knobCount2;
 gboolean plotterMoved = FALSE;
@@ -42,8 +43,9 @@ static GList *pressedKeys = NULL;
 static GdkSeat *seat = NULL;
 
 static GdkRectangle OneFingerAreas[20];
-static GdkRectangle PaperArea;
-static gboolean PaperLoaded = FALSE; 
+
+
+
 static struct knobInfo
 {
     int type;
@@ -62,8 +64,12 @@ static struct knobInfo
 static int PenX,PenY;
 static gboolean PenDown = TRUE;
 static cairo_t *visibleSurfaceCr = NULL;
+static GdkRectangle PaperArea;
+static gboolean PaperLoaded = FALSE;
+static cairo_t *paperSurfaceCr = NULL;
+static cairo_t *drumSurfaceCr = NULL;
 
-//void PlotterTidy()
+
 
 __attribute__((used))
 gboolean
@@ -409,7 +415,7 @@ on_PlotterDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
 #define MIDDLE_LINE 165
 #define PAPER_WIDE 400
 #define PAPER_HIGH 400
-#define PAPER_LEFT 50
+#define PAPER_LEFT 10
 #define PAPER_TOP 200
 #define DRUM_WIDE 616
 #define DRUM_HIGH 750
@@ -429,6 +435,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     static cairo_t *backgroundSurfaceCr = NULL;
     static cairo_surface_t *visibleSurface = NULL;
     static cairo_surface_t *carriageSurface = NULL;
+    static cairo_surface_t *drumSurface = NULL;
      static cairo_t *carriageSurfaceCr = NULL;
     //static cairo_t *drumSurfaceCr = NULL;
     GtkAllocation  DrawingAreaAlloc;
@@ -451,21 +458,32 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	
 	backgroundSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
 			   DrawingAreaAlloc.width,DrawingAreaAlloc.height);
-
 	backgroundSurfaceCr = cairo_create(backgroundSurface);
 
 	gdk_cairo_set_source_pixbuf (backgroundSurfaceCr, background_pixbuf ,0.0,0.0);
 	cairo_paint(backgroundSurfaceCr);
 
 
-	// Create surface for the drum
+	// Create surface to be shown
 	visibleSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
 						  DRUM_WIDE,DRUM_HIGH+LINES_VISIBLE);
-
 	visibleSurfaceCr = cairo_create(visibleSurface);
-	// Set to grey (and should draw sprockets)
-	cairo_set_source_rgba(visibleSurfaceCr,0.8,0.8,0.8,1.0);
+
+	// Initialise it to the drum image.
+	gdk_cairo_set_source_pixbuf (visibleSurfaceCr, drum_pixbuf ,0.0,0.0);
 	cairo_paint(visibleSurfaceCr);
+
+
+	// Create surface for things drawn on the drum !
+	drumSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+						  DRUM_WIDE,DRUM_HIGH+LINES_VISIBLE);
+	drumSurfaceCr = cairo_create(drumSurface);
+
+	// Initialise it to the drum image.
+	gdk_cairo_set_source_pixbuf (drumSurfaceCr, drum_pixbuf ,0.0,0.0);
+	cairo_paint(drumSurfaceCr);
+
+
 #if 0
 	// Add a piece of white paper
 	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
@@ -543,9 +561,6 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     
     cairo_set_source_surface (cr, backgroundSurface ,0.0,0.0);
     cairo_paint(cr);
-    
-    //cairo_set_source_surface (cr, drumSurface ,39.0,670); // 835-(PenY/2));
-    //cairo_rectangle(cr, 39.0, 20.0, 616.0-20.0, 330);
 
     // Set top line of the image
     topLine = (PenY/2) - MIDDLE_LINE;
@@ -564,7 +579,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     cairo_fill(cr);
 
 
-// Draw carraige support bars
+    // Draw carraige support bars
     {
 	gdouble grey;
 	cairo_set_line_width (cr, 1);
@@ -577,16 +592,14 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,-25 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
 	    cairo_move_to (cr,DRUM_LEFT           +0.5,+26 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
 	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,+26 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
-	    //cairo_stroke(cr);
-	    //grey = 1.0 - grey;
-	    //cairo_set_source_rgba(cr,grey,grey,grey,1.0);
+
 	    cairo_move_to (cr,DRUM_LEFT           +0.5,-26 + DRUM_TOP + MIDDLE_LINE - bar + 0.5);
 	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,-26 + DRUM_TOP + MIDDLE_LINE - bar + 0.5);
 	    cairo_move_to (cr,DRUM_LEFT           +0.5,+25 + DRUM_TOP + MIDDLE_LINE - bar + 0.5);
 	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,+25 + DRUM_TOP + MIDDLE_LINE - bar + 0.5);
 	    cairo_stroke(cr);
 	}
-
+	// Draw the pen wire
 	grey = 0.8;
 	cairo_set_source_rgba(cr,grey,grey,grey,1.0);
 	cairo_move_to (cr,DRUM_LEFT           +0.5,DRUM_TOP + MIDDLE_LINE + 0.5);
@@ -602,9 +615,9 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     }
     
 
-// Draw the carriage
-    cairo_set_source_surface(cr,carriageSurface,40.0+(PenX/2), DRUM_TOP+MIDDLE_LINE-32.0);
-    cairo_rectangle(cr, 40.0+(PenX/2),  DRUM_TOP+MIDDLE_LINE-32.0, 64.0, 64.0);
+    // Draw the carriage
+    cairo_set_source_surface(cr,carriageSurface,DRUM_LEFT+(PenX/2), DRUM_TOP+MIDDLE_LINE-32.0);
+    cairo_rectangle(cr, DRUM_LEFT+(PenX/2),  DRUM_TOP+MIDDLE_LINE-32.0, 64.0, 64.0);
     cairo_stroke_preserve(cr);
     cairo_fill(cr);
     
@@ -612,6 +625,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	DrawHandsNew(cr); 
     return FALSE;
 }
+
 
 __attribute__((used)) 
 gboolean
@@ -1051,40 +1065,59 @@ static void limitX(void)
 
 static void plotPoint(void)
 {
-    gdouble halfX,halfY;
-    halfX = 32.5+PenX/2;
+    gdouble halfX,halfY,halfXPlus;
+    halfX = PenX/2;
+    halfXPlus = halfX + 32.5;
     halfY = PenY/2;
 	
     cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,1.0);
     cairo_set_line_width (visibleSurfaceCr, 1);
     cairo_set_line_cap  (visibleSurfaceCr, CAIRO_LINE_CAP_ROUND);
-    cairo_move_to (visibleSurfaceCr, halfX,0.5+(halfY));
-    cairo_line_to (visibleSurfaceCr, halfX,0.5+(halfY));
+    cairo_move_to (visibleSurfaceCr, halfXPlus,0.5+(halfY));
+    cairo_line_to (visibleSurfaceCr, halfXPlus,0.5+(halfY));
     cairo_stroke (visibleSurfaceCr);
 
     // Duplicate at bottom
     if((halfY)<=LINES_VISIBLE)
     {
-	cairo_set_source_rgba(visibleSurfaceCr,1.0,0.0,0.0,1.0);
-	cairo_move_to (visibleSurfaceCr, halfX,0.5+(halfY)+DRUM_HIGH);
-	cairo_line_to (visibleSurfaceCr, halfX,0.5+(halfY)+DRUM_HIGH);
+	cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,1.0);
+	cairo_move_to (visibleSurfaceCr, halfXPlus,0.5+(halfY)+DRUM_HIGH);
+	cairo_line_to (visibleSurfaceCr, halfXPlus,0.5+(halfY)+DRUM_HIGH);
 	cairo_stroke (visibleSurfaceCr);
     }
 
     if((halfX >= PaperArea.x) && (halfX <= (PaperArea.x+PaperArea.width)) &&
        (halfY >= PaperArea.y) && (halfY <= (PaperArea.y+PaperArea.height)))
     {
-	printf("ON  Paper\n");
-
+	//printf("ON  Paper %d %f\n",PenX,(2.0*PaperArea.x));
+	cairo_set_source_rgba(paperSurfaceCr,0.0,0.0,0.0,1.0);
+	cairo_set_line_width (paperSurfaceCr, 1);
+	cairo_set_line_cap  (paperSurfaceCr, CAIRO_LINE_CAP_ROUND);
+	cairo_move_to (paperSurfaceCr, 0.5+PenX-(2*PaperArea.x),0.5+PenY-(2*PaperArea.y));
+	cairo_line_to (paperSurfaceCr, 0.5+PenX-(2*PaperArea.x),0.5+PenY-(2*PaperArea.y));
+	cairo_stroke (paperSurfaceCr);
 
     }
     else
     {
-	printf("OFF Paper\n");
+	cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
+	cairo_set_line_width (drumSurfaceCr, 1);
+	cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
+	cairo_move_to (drumSurfaceCr, halfXPlus,0.5+(halfY));
+	cairo_line_to (drumSurfaceCr, halfXPlus,0.5+(halfY));
+	cairo_stroke (drumSurfaceCr);
+
+	// Duplicate at bottom
+	if((halfY)<=LINES_VISIBLE)
+	{
+	    cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
+	    cairo_move_to (drumSurfaceCr, halfXPlus,0.5+(halfY)+DRUM_HIGH);
+	    cairo_line_to (drumSurfaceCr, halfXPlus,0.5+(halfY)+DRUM_HIGH);
+	    cairo_stroke (drumSurfaceCr);
+	}
+
+	//printf("OFF Paper\n");
     }
-
-
-
 }
 
 static void ACTchanged(unsigned int value)
@@ -1183,22 +1216,61 @@ static void fastMovePen( __attribute__((unused)) unsigned int value)
 static void squarePaperHandler(__attribute__((unused)) int state)
 {
     static GdkRectangle paper = { PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH};
+    static cairo_surface_t *paperSurface = NULL;
+
     g_info("squarePaperHandler\n");
 
+
+    if(PaperLoaded == FALSE)
+    {
+	// Put paper onto the drum
 	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-	cairo_rectangle(visibleSurfaceCr, PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
+	cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
 	cairo_stroke_preserve(visibleSurfaceCr);
 	cairo_fill(visibleSurfaceCr);
 
 	// Add duplicate at bottom of surface
 	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-	cairo_rectangle(visibleSurfaceCr, PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
+	cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
 	cairo_stroke_preserve(visibleSurfaceCr);
 	cairo_fill(visibleSurfaceCr);
 
+
+	// Create full resolution surface for the paper
+	paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+						  2*PAPER_WIDE,2*PAPER_HIGH);
+
+	paperSurfaceCr = cairo_create(paperSurface);
+
+	// Clear to white
+	cairo_set_source_rgba(paperSurfaceCr,1.0,1.0,1.0,1.0);
+	cairo_paint(paperSurfaceCr);
+	
 	PaperLoaded = TRUE;
 	PaperArea = paper;
-    
+    }
+    else
+    {
+	// Take paper off the drum
+	// free any previous paper context and surface;
+	if(paperSurface != NULL)
+	{
+	    cairo_surface_write_to_png (paperSurface,"/tmp/plotterPaper.png");
+	    cairo_surface_destroy(paperSurface);
+
+	}
+	if(paperSurfaceCr != NULL)
+	{
+	    cairo_destroy(paperSurfaceCr);	    
+	}
+
+	cairo_set_source_surface(visibleSurfaceCr, cairo_get_target(drumSurfaceCr), 0.0,0.0);
+	cairo_rectangle(visibleSurfaceCr, 0.0,0.0, DRUM_WIDE, DRUM_HIGH+LINES_VISIBLE);
+	cairo_fill(visibleSurfaceCr);
+
+	PaperLoaded = FALSE;
+
+    }
 }
 
 
@@ -1279,7 +1351,16 @@ static const char *manualPngFileNames[] =
 };
 
 
+void PlotterTidy(GString *userPath)
+{
+    GString *drumFileName;
+    drumFileName = g_string_new(userPath->str);
 
+    g_string_append(drumFileName,"Drum.png");
+    
+    cairo_surface_write_to_png (cairo_get_target(drumSurfaceCr),drumFileName->str);
+    g_string_free(drumFileName,TRUE);
+}
 
 #define KNOB_WIDE 32
 #define KNOB_HIGH 32
@@ -1315,7 +1396,9 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     carriage_pixbuf =
 	my_gdk_pixbuf_new_from_file(fileName->str);
 
-
+    g_string_printf(fileName,"%sDrum.png",userPath->str);
+    drum_pixbuf =
+	my_gdk_pixbuf_new_from_file(fileName->str);
     
 
     for(n=0;n<9;n++)

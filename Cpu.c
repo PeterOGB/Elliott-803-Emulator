@@ -199,7 +199,7 @@ static void CPU_sound(__attribute__((unused)) void *buffer,
 
 extern E803word *CoreStore;
 
-void CpuTidy(__attribute__((unused)) GString *userPath,gchar *coreFileName)
+void CpuTidy(GString *userPath,gchar *coreFileName)
 {
 
 
@@ -244,7 +244,7 @@ void CpuTidy(__attribute__((unused)) GString *userPath,gchar *coreFileName)
 
     g_object_unref(gf);
 	
-
+    g_string_free(CoreImageFileName,TRUE);
 }
 
 

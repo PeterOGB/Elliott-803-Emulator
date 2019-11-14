@@ -98,6 +98,7 @@ void EmulatorShutdown(void)
     HoursRunTidy(configPath);
     // TEMPREMOVEPTSTidy(configPath);
     CpuTidy(configPath,saveCoreFileName);
+    PlotterTidy(configPath);    
 /* TEMPREMOVE 
     if(traceChannel != NULL)
     {
