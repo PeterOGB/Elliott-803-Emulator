@@ -19,6 +19,8 @@ static GdkPixbuf *background_pixbuf = NULL;
 static GdkPixbuf *knobPixbufs[9];
 static GdkPixbuf *carriage_pixbuf;
 static GdkPixbuf *drum_pixbuf;
+static GdkPixbuf *paper_pixbuf;
+static GdkPixbuf *visible_pixbuf;
 static GdkPixbuf *manualPixbufs[3];
 int knobCount,knobCount2;
 gboolean plotterMoved = FALSE;
@@ -64,7 +66,7 @@ static struct knobInfo
 static int PenX,PenY;
 static gboolean PenDown = TRUE;
 static cairo_t *visibleSurfaceCr = NULL;
-static GdkRectangle PaperArea;
+static GdkRectangle PaperArea = {0,0,0,0};
 static gboolean PaperLoaded = FALSE;
 static cairo_t *paperSurfaceCr = NULL;
 static cairo_t *drumSurfaceCr = NULL;
@@ -422,7 +424,7 @@ on_PlotterDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
 #define DRUM_LEFT 39.0
 #define DRUM_TOP 18.0
 
-
+static GdkRectangle defaultPaperSize = { PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH};
 
 __attribute__((used))
 gboolean
@@ -470,7 +472,9 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	visibleSurfaceCr = cairo_create(visibleSurface);
 
 	// Initialise it to the drum image.
-	gdk_cairo_set_source_pixbuf (visibleSurfaceCr, drum_pixbuf ,0.0,0.0);
+	if(visible_pixbuf != NULL)
+	    gdk_cairo_set_source_pixbuf (visibleSurfaceCr, visible_pixbuf ,0.0,0.0);
+	
 	cairo_paint(visibleSurfaceCr);
 
 
@@ -482,6 +486,23 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	// Initialise it to the drum image.
 	gdk_cairo_set_source_pixbuf (drumSurfaceCr, drum_pixbuf ,0.0,0.0);
 	cairo_paint(drumSurfaceCr);
+
+
+	if(paper_pixbuf != NULL)
+	{
+	    cairo_surface_t *paperSurface = NULL;
+	    paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+						  2*PAPER_WIDE,2*PAPER_HIGH);
+
+	    paperSurfaceCr = cairo_create(paperSurface);
+	    gdk_cairo_set_source_pixbuf (paperSurfaceCr, paper_pixbuf ,0.0,0.0);
+	
+	    cairo_paint(paperSurfaceCr);
+
+	    PaperLoaded = TRUE;
+	    PaperArea = defaultPaperSize;
+	}
+	    
 
 
 #if 0
@@ -1086,17 +1107,23 @@ static void plotPoint(void)
 	cairo_stroke (visibleSurfaceCr);
     }
 
+
+
     if((halfX >= PaperArea.x) && (halfX <= (PaperArea.x+PaperArea.width)) &&
        (halfY >= PaperArea.y) && (halfY <= (PaperArea.y+PaperArea.height)))
     {
+	
 	//printf("ON  Paper %d %f\n",PenX,(2.0*PaperArea.x));
-	cairo_set_source_rgba(paperSurfaceCr,0.0,0.0,0.0,1.0);
-	cairo_set_line_width (paperSurfaceCr, 1);
-	cairo_set_line_cap  (paperSurfaceCr, CAIRO_LINE_CAP_ROUND);
-	cairo_move_to (paperSurfaceCr, 0.5+PenX-(2*PaperArea.x),0.5+PenY-(2*PaperArea.y));
-	cairo_line_to (paperSurfaceCr, 0.5+PenX-(2*PaperArea.x),0.5+PenY-(2*PaperArea.y));
-	cairo_stroke (paperSurfaceCr);
-
+	// Draw full resolution version if paper loaded
+	if(paperSurfaceCr != NULL)
+	{
+	    cairo_set_source_rgba(paperSurfaceCr,0.0,0.0,0.0,1.0);
+	    cairo_set_line_width (paperSurfaceCr, 1);
+	    cairo_set_line_cap  (paperSurfaceCr, CAIRO_LINE_CAP_ROUND);
+	    cairo_move_to (paperSurfaceCr, 0.5+PenX-(2*PaperArea.x),0.5+PenY-(2*PaperArea.y));
+	    cairo_line_to (paperSurfaceCr, 0.5+PenX-(2*PaperArea.x),0.5+PenY-(2*PaperArea.y));
+	    cairo_stroke (paperSurfaceCr);
+	}
     }
     else
     {
@@ -1215,7 +1242,7 @@ static void fastMovePen( __attribute__((unused)) unsigned int value)
 
 static void squarePaperHandler(__attribute__((unused)) int state)
 {
-    static GdkRectangle paper = { PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH};
+    
     static cairo_surface_t *paperSurface = NULL;
 
     g_info("squarePaperHandler\n");
@@ -1241,13 +1268,12 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 						  2*PAPER_WIDE,2*PAPER_HIGH);
 
 	paperSurfaceCr = cairo_create(paperSurface);
-
 	// Clear to white
 	cairo_set_source_rgba(paperSurfaceCr,1.0,1.0,1.0,1.0);
 	cairo_paint(paperSurfaceCr);
 	
 	PaperLoaded = TRUE;
-	PaperArea = paper;
+	PaperArea = defaultPaperSize;
     }
     else
     {
@@ -1356,10 +1382,31 @@ void PlotterTidy(GString *userPath)
     GString *drumFileName;
     drumFileName = g_string_new(userPath->str);
 
-    g_string_append(drumFileName,"Drum.png");
+    g_string_printf(drumFileName,"%s%s",userPath->str,"Drum.png");
     
     cairo_surface_write_to_png (cairo_get_target(drumSurfaceCr),drumFileName->str);
+
+
+    // Also need to save the paper position and size in a config file.
+    g_string_printf(drumFileName,"%s%s",userPath->str,"Paper.png");
+
+    if(paperSurfaceCr != NULL)
+    {
+	cairo_surface_write_to_png (cairo_get_target(paperSurfaceCr),drumFileName->str);
+    }
+   
+
+ 
+    g_string_printf(drumFileName,"%s%s",userPath->str,"Visible.png");
+    
+    cairo_surface_write_to_png (cairo_get_target(visibleSurfaceCr),drumFileName->str);
+
     g_string_free(drumFileName,TRUE);
+
+    
+
+
+
 }
 
 #define KNOB_WIDE 32
@@ -1396,9 +1443,39 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     carriage_pixbuf =
 	my_gdk_pixbuf_new_from_file(fileName->str);
 
+    // Try to restore plotter images from users directory
+    // Use images from 803-Resources if not found.
     g_string_printf(fileName,"%sDrum.png",userPath->str);
     drum_pixbuf =
-	my_gdk_pixbuf_new_from_file(fileName->str);
+	gdk_pixbuf_new_from_file(fileName->str,NULL);
+    if(drum_pixbuf == NULL)
+    {
+	g_string_printf(fileName,"%sgraphics/Drum.png",sharedPath->str);
+	drum_pixbuf =
+	    my_gdk_pixbuf_new_from_file(fileName->str);
+    }
+
+    // Null is ok here 
+    g_string_printf(fileName,"%sPaper.png",userPath->str);
+    paper_pixbuf =
+   	gdk_pixbuf_new_from_file(fileName->str,NULL);
+
+	
+
+	
+ 
+
+    
+    
+    g_string_printf(fileName,"%sVisible.png",userPath->str);
+    visible_pixbuf =
+	gdk_pixbuf_new_from_file(fileName->str,NULL);
+    if(visible_pixbuf == NULL)
+    {
+	g_string_printf(fileName,"%sgraphics/Drum.png",sharedPath->str);
+	visible_pixbuf =
+	    my_gdk_pixbuf_new_from_file(fileName->str);
+    }
     
 
     for(n=0;n<9;n++)
