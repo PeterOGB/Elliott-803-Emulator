@@ -367,6 +367,14 @@ int main(int argc, char *argv[])
     g_timeout_add(10,timerTick100,NULL);
 
 
+    g_info("GTK version %d-%d-%d\n",gtk_get_major_version(),
+	   gtk_get_minor_version(),gtk_get_micro_version());
+
+
+    g_info("GLIB version %d-%d-%d\n",glib_major_version,
+	   glib_minor_version,glib_micro_version);
+
+    
     // Start the GTK+ main event loop.
     gtk_main();
     

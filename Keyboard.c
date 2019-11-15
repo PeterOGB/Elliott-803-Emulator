@@ -39,10 +39,10 @@ static gdouble deferedMotionX,deferedMotionY;
 static gdouble FingerPressedAtX = 0,FingerPressedAtY = 0;
 static GList *pressedKeys = NULL;
 
-static gboolean warpToLeftHand = FALSE;
-static gboolean warpToRightHand = FALSE;
+//static gboolean warpToLeftHand = FALSE;
+//static gboolean warpToRightHand = FALSE;
 
-static guint32 exitTimeStamp;
+//static guint32 exitTimeStamp;
 
 static GdkSeat *seat = NULL;
 
@@ -133,7 +133,6 @@ enum actions {FREE=0,LATCH,TOGGLE,RADIO};
 
 static int buttonsReleased;
 static unsigned int rowValues[ROWCOUNT];
-//{F1=0,N1,F2,N2,OPERATE,RON,CS,MD,RESET,BATOFF,BATON,CPUOFF,CPUON,SELSTOP,ROWCOUNT}; 
 
 static enum WiringEvent rowToWires[] = {F1WIRES,N1WIRES,F2WIRES,N2WIRES,OPERATEWIRE,RONWIRES,
 					CSWIRE,MDWIRE,RESETWIRE,
@@ -248,13 +247,10 @@ on_WordGenDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     GtkAllocation  DrawingAreaAlloc;
     struct buttonInfo *bp;
 
-    //printf("%s called\n",__FUNCTION__);
-    
     if(firstCall)
     {
 	firstCall = FALSE;
 	gtk_widget_get_allocation(drawingArea, &DrawingAreaAlloc);
-	//printf("%s DrawingAreaAlloc.width=%d\n",__FUNCTION__,DrawingAreaAlloc.width);
 
 	// Create a surface and an associated context
 	surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
@@ -273,7 +269,6 @@ on_WordGenDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	if(bp->changed)
 	{
 	    bp->changed = FALSE;
-	    //printf("%s button %d changed\n",__FUNCTION__,buttonNumber);
 	    if(bp->state)
 	    {
 		gdk_cairo_set_source_pixbuf (surfaceCr, buttonPixbufs[bp->buttonType][1] ,bp->xpos,bp->ypos);
@@ -377,74 +372,27 @@ KeyboardWindowEnterHandler(__attribute__((unused)) int s,
 			  __attribute__((unused)) int e,
 			  void *p)
 {
-    //gdouble EnteredAtX,EnteredAtY;
+    gdouble EnteredAtX,EnteredAtY;
     struct WindowEvent *wep  = (struct WindowEvent *) p;
-    enum handimages image;
-    guint32 entryTimeStamp;
-
-    //stackTrace();
-
-    activeGdkWindow = wep->window;   // BUG FIX ?
+    gint wide;
+    GtkWidget *drawingArea;
     
-    entryTimeStamp = ((GdkEventCrossing *)wep->data)->time;
-
-    //printf("%s TIME: %"PRIu32"\n",__FUNCTION__,entryTimeStamp - exitTimeStamp);
-     
-    //EnteredAtX = wep->eventX;
-    //EnteredAtY = wep->eventY;
+    activeGdkWindow = wep->window;   // BUG FIX ?
+    drawingArea = GTK_WIDGET(wep->data);
+    
+    EnteredAtX = wep->eventX;
+    EnteredAtY = wep->eventY;
 
     // updateHands not called so need to do this
     setMouseAtXY(wep->eventX,wep->eventY);
-
-    if((entryTimeStamp - exitTimeStamp > 500))
-    {
-	image = HandIsEmpty(LeftHand) ? HAND_EMPTY  : HAND_NO_CHANGE;
-	ConfigureLeftHandNew (100.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,image);
-
-	// TODO This will need more when hands can hold things other than tapes.
-	image = HandIsEmpty(RightHand) ? HAND_EMPTY  : HAND_NO_CHANGE;
-	ConfigureRightHandNew(400.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,image);
-    }
-    else
-    {
-	// Quick re-entry
-	//printf("RE-ENTRY AT %f %f\n",wep->eventX,wep->eventY);
-	image = HandIsEmpty(LeftHand) ? HAND_EMPTY : HAND_NO_CHANGE;
-	ConfigureLeftHandNew (LeftHandExitedAtX,LeftHandExitedAtY,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,image);
-	image = HandIsEmpty(RightHand) ? HAND_EMPTY : HAND_NO_CHANGE;
-	ConfigureRightHandNew(RightHandExitedAtX,RightHandExitedAtY,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,image);
-
-    }
-
-    // Set flags to move the pointer to the default hand position if tracking a hand on enty.
-    if(LeftHandInfo.Fsm->state == TRACKING_HAND)
-    {
-	warpToLeftHand = TRUE;
-    }
-    if(RightHandInfo.Fsm->state == TRACKING_HAND)
-    {
-	warpToRightHand = TRUE;
-    }
-
+    
     SetActiveWindow(WORDGENWINDOW);
-#if 0    
-    if(HandIsEmpty(LeftHand))
-	ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
-    else
-	ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_HOLDING_REEL);
-    
-    if(HandIsEmpty(RightHand))
-	ConfigureRightHandNew(400.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
-    else
-	ConfigureRightHandNew(400.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_HOLDING_REEL);
-    
-    //ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_SLIDING_TAPE);
-    //ConfigureRightHandNew(300.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_SLIDING_TAPE);
-    
-    printf("%s called EnteredAtX = %f \n",__FUNCTION__,EnteredAtX);
-    if(EnteredAtX < 250.0)
+
+    wide = gtk_widget_get_allocated_width(drawingArea);
+
+    if(EnteredAtX < wide/2)
     {
-//	ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_SLIDING_TAPE);
+	ConfigureRightHandNew(400.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
 	if(HandIsEmpty(LeftHand))
 	{
 	    ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_THREE_FINGERS);
@@ -459,7 +407,7 @@ KeyboardWindowEnterHandler(__attribute__((unused)) int s,
     }
     else
     {
-//	ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_SLIDING_TAPE);
+	ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
 	if(HandIsEmpty(RightHand))
 	{
 	    ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_THREE_FINGERS);
@@ -473,7 +421,7 @@ KeyboardWindowEnterHandler(__attribute__((unused)) int s,
 	SetActiveWindow(WORDGENWINDOW);
     }
 
-#endif
+
     
     // Stop hand being released immediatly after entering the window.
     setEnterDelay(100);
@@ -495,12 +443,10 @@ KeyboardWindowEnterHandler(__attribute__((unused)) int s,
 	deferedMotion = FALSE;
     }
 
-     // Remove cursor if tracking a hand on entry
-    if(warpToLeftHand || warpToRightHand)
-    {
-	savedCursor = gdk_window_get_cursor(wep->window);
-	gdk_window_set_cursor(wep->window,blankCursor);
-    }
+     // Remove cursor     {
+    savedCursor = gdk_window_get_cursor(wep->window);
+    gdk_window_set_cursor(wep->window,blankCursor);
+    
 
     register_hand_motion_callback(on_Hand_motion_event);
     
@@ -554,17 +500,11 @@ KeyboardWinowLeaveHandler(__attribute__((unused)) int s,
 			  void *p)
 {
     struct WindowEvent *wep  = (struct WindowEvent *) p;
-    //printf("%s called \n",__FUNCTION__);
-//    setHandsInWindow(NOWINDOW,USE_NEITHER_HAND,USE_NEITHER_HAND,0.0,0.0,0.0,0.0);
 
     register_hand_motion_callback(NULL);
-    exitTimeStamp = ((GdkEventCrossing *)wep->data)->time;
-    
 
     getTrackingXY2(&LeftHandInfo,&LeftHandExitedAtX,&LeftHandExitedAtY);
     getTrackingXY2(&RightHandInfo,&RightHandExitedAtX,&RightHandExitedAtY);
-
-    //printf("%s TIME: %"PRIu32" %f %f \n",__FUNCTION__,exitTimeStamp,wep->eventX,wep->eventY);
     
     SetActiveWindow(NOWINDOW);
     InWordGenWindow = FALSE;
@@ -640,27 +580,6 @@ static struct fsmtable KeyboardWindowTable[] = {
 
     {-1,-1,-1,NULL}
 }; 
-/*
-
-static struct fsmtable KeyboardWindowTable[] = {
-    {OUTSIDE_WINDOW,       FSM_ENTER,           INSIDE_WINDOW,          KeyboardWindowEnterHandler},
-    
-    {INSIDE_WINDOW,        FSM_LEAVE,           OUTSIDE_WINDOW,         KeyboardWinowLeaveHandler},
-    {INSIDE_WINDOW,        FSM_CONSTRAINED,     CONSTRAINED_INSIDE,     KeyboardWindowConstrainedHandler}, 
-    
-    {CONSTRAINED_INSIDE,   FSM_UNCONSTRAINED,   INSIDE_WINDOW,          KeyboardWindowUnconstrainedHandler},
-    {CONSTRAINED_INSIDE,   FSM_LEAVE,           CONSTRAINED_OUTSIDE,    NULL},
-    
-    {CONSTRAINED_OUTSIDE,  FSM_ENTER,           CONSTRAINED_INSIDE,     NULL},
-    {CONSTRAINED_OUTSIDE,  FSM_UNCONSTRAINED,   WAITING_FOR_WARP_ENTRY, KeyboardWindowUnconstrainedHandler},
-
-    {WAITING_FOR_WARP_ENTRY,FSM_ENTER,          INSIDE_WINDOW,          NULL},
-    
-
-    {-1,-1,-1,NULL}
-}; 
-
- */
 
 
 static struct fsm KeyboardWindowFSM = { "Keyboard Window FSM",0, KeyboardWindowTable ,
@@ -675,13 +594,13 @@ static struct fsm KeyboardWindowFSM = { "Keyboard Window FSM",0, KeyboardWindowT
 static gboolean INSIDE = FALSE;
 __attribute__((used))
 gboolean
-on_WordGenDrawingArea_enter_notify_event(__attribute__((unused)) GtkWidget *drawingArea,
+on_WordGenDrawingArea_enter_notify_event(GtkWidget *drawingArea,
 				    __attribute__((unused)) GdkEventCrossing *event,
 				    __attribute__((unused)) gpointer data)
 {
-    struct WindowEvent we = {WORDGENWINDOW,event->x,event->y,event->window,(gpointer) event};
+    struct WindowEvent we = {WORDGENWINDOW,event->x,event->y,event->window,(gpointer) drawingArea};
 
-    //
+    g_info("drawingArea=%p\n",drawingArea);
 
     if(INSIDE)
     {
@@ -715,11 +634,6 @@ on_WordGenDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
     return TRUE;
 }
 
-
-
-//static rowToWires[] = {F1WIRES,N1WIRES,F2WIRES,N2WIRES,-1,RONWIRES,CS,MD,RESET,-1,-1,-1,-1,SELSTOP};
-static guint pressedAtTime ;
-
 __attribute__((used))
 gboolean
 on_WordGenDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *drawingArea,
@@ -734,14 +648,11 @@ on_WordGenDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
     if(event->button == 3)
     {
-	//dropHand();
 	swapHands(drawingArea);
 	return TRUE;
     }
     
     trackingHand = updateHands(event->x,event->y,&FingerPressedAtX,&FingerPressedAtY);
-    // printf("%s called (%f,%f) (%f,%f) trackingHand=(%p)\n",__FUNCTION__,event->x,event->y,
-    //   FingerPressedAtX,FingerPressedAtY,trackingHand);
 
     // Ignore button press if tracking hand is not empty
     if( (trackingHand != NULL) && ( (trackingHand->showingHand == HAND_THREE_FINGERS) ||
@@ -759,23 +670,13 @@ on_WordGenDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    top = bp->ypos;
 	    bottom = top + bp->height;
 
-	    //printf("%s (%d,%d,%d,%d)(%d,%d)\n",__FUNCTION__,
-	    //       left,right,top,bottom,FingerPressedAtX,FingerPressedAtY);
-
 	    if((FingerPressedAtX >= left) && (FingerPressedAtX <= right) &&
 	       (FingerPressedAtY >= top) && (FingerPressedAtY <= bottom))
 	    {
-		//printf(">>>>>>>>>>>>>>>>  Hit button number %d ",buttonNumber);
-
 		doButtonFSM(bp,WG_PRESS);
-		//trackingHand->FingersPressed |= trackingHand->IndexFingerBit;
 
 		row = (bp->rowId);
 		value = rowValues[row];
-		//printf("%s row=%d value=%d\n",__FUNCTION__,row,value);
-		//buttonsUpdateCPU(row,value);
-		//wiringMulti(rowToWires[row],value);
-
 	    
 		if(bp->wire != 0)
 		{
@@ -783,9 +684,6 @@ on_WordGenDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		}
 	    }
 	}
-	//printf("RightHandInfo.FingersPressed = %x\n",RightHandInfo.FingersPressed);
-
-	pressedAtTime = event->time;
     }
     return TRUE;
 }
@@ -825,12 +723,10 @@ on_WordGenDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 
     if(event->button == 3)
     {
-	//dropHand();
 	return TRUE;
     }
     
     trackingHand = updateHands(event->x,event->y,&FingerPressedAtX,&FingerPressedAtY);
-    //printf("%s called %d\n",__FUNCTION__,event->time - pressedAtTime);
 
     if((trackingHand != NULL) && ( (trackingHand->showingHand == HAND_THREE_FINGERS) ||
 				   (trackingHand->showingHand == HAND_ONE_FINGER) ||
@@ -844,49 +740,30 @@ on_WordGenDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	    top = bp->ypos;
 	    bottom = top + bp->height;
 
-	    //printf("%s (%d,%d,%d,%d)(%d,%d)\n",__FUNCTION__,
-	    //       left,right,top,bottom,FingerPressedAtX,FingerPressedAtY);
-
 	    if((FingerPressedAtX >= left) && (FingerPressedAtX <= right) &&
 	       (FingerPressedAtY >= top) && (FingerPressedAtY <= bottom))
 	    {
-		//printf(">>>>>>>>>>>>>>>>  Hit button number %d ",buttonNumber);
-
 		doButtonFSM(bp,WG_RELEASE);
-	    
-	    
 	    
 		row = (bp->rowId);
 		value = rowValues[row];
-		//printf("   row = %d value = %d\n",row,value);
-		//wiringMulti(rowToWires[row],value);
 		if(bp->wire != 0)
 		{
 		    wiring(bp->wire,value);
 		}
 	    }
 	}
-
-	// Always release the finger (even if not over a button).
-	//trackingHand->FingersPressed &= ~trackingHand->IndexFingerBit;;
     }
 
     // Always release the finger (even if not over a button).
     if(trackingHand != NULL) trackingHand->FingersPressed &= ~trackingHand->IndexFingerBit;;
     
-    //if(trackingHand != NULL) printf("%s trackingHand->handConstrained=%d trackingHand->FingersPressed=%d\n",
-//				    __FUNCTION__,trackingHand->handConstrained,
-//				    trackingHand->FingersPressed);
-    
     if((trackingHand != NULL) && (trackingHand->handConstrained != HAND_NOT_CONSTRAINED) &&
        (trackingHand->FingersPressed == 0))
     {
 	struct WindowEvent we = {WORDGENWINDOW,0,0,event->window,(gpointer) trackingHand};
-	//warpToFinger(drawingArea,trackingHand);
 	trackingHand->handConstrained = HAND_NOT_CONSTRAINED;
-	//printf("*************** %s UNCONSTRAINED *********************\n",__FUNCTION__);
 	doFSM(&KeyboardWindowFSM,FSM_UNCONSTRAINED,(void *)&we);
-	
     }
 
     
@@ -931,30 +808,16 @@ static GdkRectangle AllFingersAreas[1] =
 
 __attribute__((used)) 
 gboolean
-on_WordGenDrawingArea_motion_notify_event(GtkWidget *drawingArea,
+on_WordGenDrawingArea_motion_notify_event(__attribute__((unused)) GtkWidget *drawingArea,
 					  __attribute__((unused)) GdkEventMotion *event,
 					  __attribute__((unused)) gpointer data)
 {
     //gdouble hx,hy;
     
     //printf("%s called\n",__FUNCTION__);
+#if 0
     if(warpToLeftHand)
     {
-/*	
-	int ox,oy;
-	GdkWindow *win;
-	win = gtk_widget_get_parent_window (drawingArea);
-
-	gdk_window_get_origin (win,&ox,&oy);
-
-	ox += ((gint) LeftHandInfo.FingerAtX);
-	oy += ((gint) LeftHandInfo.FingerAtY);
-	
-	gdk_device_warp (event->device,
-                         gdk_screen_get_default(),
-                         ox,oy);
-
-*/
 	warpToFinger(gtk_widget_get_parent_window (drawingArea),&LeftHandInfo);
 	warpToLeftHand = FALSE;
 	return GDK_EVENT_STOP;
@@ -962,27 +825,15 @@ on_WordGenDrawingArea_motion_notify_event(GtkWidget *drawingArea,
     
     if(warpToRightHand)
     {
-	int ox,oy;
-	GdkWindow *win;
-	win = gtk_widget_get_parent_window (drawingArea);
-
-	gdk_window_get_origin (win,&ox,&oy);
-	
-	ox += ((gint) RightHandInfo.FingerAtX);
-	oy += ((gint) RightHandInfo.FingerAtY);
-
-	gdk_device_warp (event->device,
-                         gdk_screen_get_default(),
-                         ox,oy);
-
+	warpToFinger(gtk_widget_get_parent_window (drawingArea),&RightHandInfo);
 	warpToRightHand = FALSE;
 	return GDK_EVENT_STOP;
     }
-
+#endif
+    
     if(InWordGenWindow)
     {
 	updateHands(event->x,event->y,NULL,NULL);
-
     }
     else
     {

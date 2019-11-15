@@ -119,73 +119,27 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
 			  __attribute__((unused)) int e,
 			  void *p)
 {
+    gdouble EnteredAtX,EnteredAtY;
     struct WindowEvent *wep  = (struct WindowEvent *) p;
-    enum handimages image;
-    guint32 entryTimeStamp;
-
-    g_info("Entered\n");
+    gint wide;
+    GtkWidget *drawingArea;
 
     activeGdkWindow = wep->window;   // BUG FIX ?
+    drawingArea = GTK_WIDGET(wep->data);
     
-    entryTimeStamp = ((GdkEventCrossing *)wep->data)->time;
-
-    //printf("%s TIME: %"PRIu32"\n",__FUNCTION__,entryTimeStamp - exitTimeStamp);
-     
-    //EnteredAtX = wep->eventX;
-    //EnteredAtY = wep->eventY;
+    EnteredAtX = wep->eventX;
+    EnteredAtY = wep->eventY;
 
     // updateHands not called so need to do this
     setMouseAtXY(wep->eventX,wep->eventY);
 
-    if((entryTimeStamp - exitTimeStamp > 500))
-    {
-	image = HandIsEmpty(LeftHand) ? HAND_EMPTY  : HAND_NO_CHANGE;
-	ConfigureLeftHandNew (100.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,image);
-
-	// TODO This will need more when hands can hold things other than tapes.
-	image = HandIsEmpty(RightHand) ? HAND_EMPTY  : HAND_NO_CHANGE;
-	ConfigureRightHandNew(400.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,image);
-    }
-    else
-    {
-	// Quick re-entry
-	//printf("RE-ENTRY AT %f %f\n",wep->eventX,wep->eventY);
-	image = HandIsEmpty(LeftHand) ? HAND_EMPTY : HAND_NO_CHANGE;
-	ConfigureLeftHandNew (LeftHandExitedAtX,LeftHandExitedAtY,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,image);
-	image = HandIsEmpty(RightHand) ? HAND_EMPTY : HAND_NO_CHANGE;
-	ConfigureRightHandNew(RightHandExitedAtX,RightHandExitedAtY,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,image);
-
-    }
-
-    // Set flags to move the pointer to the default hand position if tracking a hand on enty.
-    if(LeftHandInfo.Fsm->state == TRACKING_HAND)
-    {
-	warpToLeftHand = TRUE;
-    }
-    if(RightHandInfo.Fsm->state == TRACKING_HAND)
-    {
-	warpToRightHand = TRUE;
-    }
-
     SetActiveWindow(PLOTTERWINDOW);
-#if 0    
-    if(HandIsEmpty(LeftHand))
-	ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
-    else
-	ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_HOLDING_REEL);
-    
-    if(HandIsEmpty(RightHand))
-	ConfigureRightHandNew(400.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
-    else
-	ConfigureRightHandNew(400.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_HOLDING_REEL);
-    
-    //ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_SLIDING_TAPE);
-    //ConfigureRightHandNew(300.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_SLIDING_TAPE);
-    
-    printf("%s called EnteredAtX = %f \n",__FUNCTION__,EnteredAtX);
-    if(EnteredAtX < 250.0)
+
+    wide = gtk_widget_get_allocated_width(drawingArea);
+
+    if(EnteredAtX < wide/2)
     {
-//	ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_SLIDING_TAPE);
+	ConfigureRightHandNew(400.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
 	if(HandIsEmpty(LeftHand))
 	{
 	    ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_THREE_FINGERS);
@@ -200,7 +154,7 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
     }
     else
     {
-//	ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_SLIDING_TAPE);
+	ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
 	if(HandIsEmpty(RightHand))
 	{
 	    ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_THREE_FINGERS);
@@ -214,7 +168,7 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
 	SetActiveWindow(PLOTTERWINDOW);
     }
 
-#endif
+
     
     // Stop hand being released immediatly after entering the window.
     setEnterDelay(100);
@@ -236,12 +190,10 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
 	deferedMotion = FALSE;
     }
 
-     // Remove cursor if tracking a hand on entry
-    if(warpToLeftHand || warpToRightHand)
-    {
-	savedCursor = gdk_window_get_cursor(wep->window);
-	gdk_window_set_cursor(wep->window,blankCursor);
-    }
+     // Remove cursor on entry
+   
+    savedCursor = gdk_window_get_cursor(wep->window);
+    gdk_window_set_cursor(wep->window,blankCursor);
 
     register_hand_motion_callback(on_Hand_motion_event);
     
@@ -335,6 +287,9 @@ static struct fsmtable PlotterWindowTable[] = {
     {OUTSIDE_WINDOW,           FSM_ENTER,           INSIDE_WINDOW,            PlotterWindowEnterHandler},
     
     {INSIDE_WINDOW,            FSM_LEAVE,           OUTSIDE_WINDOW,           PlotterWinowLeaveHandler},
+
+
+    // Leave this here incase the hand needs to be constrained 
 /*
     {INSIDE_WINDOW,            FSM_CONSTRAINED,     CONSTRAINED_INSIDE,       NULL}, 
     
@@ -371,13 +326,15 @@ static struct fsm PlotterWindowFSM = { "Plotter Window FSM",0, PlotterWindowTabl
 static gboolean INSIDE = FALSE;
 __attribute__((used))
 gboolean
-on_PlotterDrawingArea_enter_notify_event(__attribute__((unused)) GtkWidget *drawingArea,
+on_PlotterDrawingArea_enter_notify_event(GtkWidget *drawingArea,
 				    __attribute__((unused)) GdkEventCrossing *event,
 				    __attribute__((unused)) gpointer data)
 {
-    struct WindowEvent we = {PLOTTERWINDOW,event->x,event->y,event->window,(gpointer) event};
+    struct WindowEvent we = {PLOTTERWINDOW,event->x,event->y,event->window,(gpointer)drawingArea};
 
-    //
+    //g_info("IS THIS CALLED ???\n");
+    // THis doesn't help !
+    //gdk_window_raise(gtk_widget_get_window(drawingArea));
 
     if(INSIDE)
     {
