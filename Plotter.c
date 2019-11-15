@@ -22,7 +22,9 @@ static GdkPixbuf *drum_pixbuf;
 static GdkPixbuf *paper_pixbuf;
 static GdkPixbuf *visible_pixbuf;
 static GdkPixbuf *manualPixbufs[3];
-int knobCount,knobCount2;
+static int knobCount,knobCount2;
+static int manualKnobNumber;
+static int powerKnobNumber;
 gboolean plotterMoved = FALSE;
 static int drumFastMove = 0;
 static int carriageFastMove = 0;
@@ -518,9 +520,11 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     // Draw manual button
     {
 	int state;
-	knob = &knobs[knobCount-1];
-	state = (knob->state != 0) ?  1:0; 
-	if((state == 1) && V24On) state = 2;  // Light it up 
+//	knob = &knobs[knobCount-1];
+//	state = (knob->state != 0) ?  1:0; 
+//	if((state == 1) && V24On) state = 2;  // Light it up 
+	state = (PlotterManual) ? 1 : 0;
+	if(PlotterManual && V24On) state = 2; // Light it up
 	gdk_cairo_set_source_pixbuf (backgroundSurfaceCr,
 				     manualPixbufs[state],
 				     285.0,372.0);
@@ -1336,7 +1340,10 @@ static const char *manualPngFileNames[] =
 
 void PlotterTidy(GString *userPath)
 {
+    GString *configText;
+    int windowXpos,windowYpos;
     GString *drumFileName;
+    
     drumFileName = g_string_new(userPath->str);
 
     g_string_printf(drumFileName,"%s%s",userPath->str,"Drum.png");
@@ -1344,7 +1351,7 @@ void PlotterTidy(GString *userPath)
     cairo_surface_write_to_png (cairo_get_target(drumSurfaceCr),drumFileName->str);
 
 
-    // Also need to save the paper position and size in a config file.
+    // Eventually will need to save the paper position and size in a config file.
     g_string_printf(drumFileName,"%s%s",userPath->str,"Paper.png");
 
     if(paperSurfaceCr != NULL)
@@ -1360,11 +1367,70 @@ void PlotterTidy(GString *userPath)
 
     g_string_free(drumFileName,TRUE);
 
+    configText = g_string_new("# Plotter  configuration\n");
+
+    gtk_window_get_position(GTK_WINDOW(PlotterWindow), &windowXpos, &windowYpos);
+    g_string_append_printf(configText,"WindowPosition %d %d\n",windowXpos,windowYpos);
+
     
+    // Should probably save them all, but power and manual are the important ones 
+    g_string_append_printf(configText,"ManualButton %d\n",PlotterManual ? 1 : 0);
+    g_string_append_printf(configText,"PowerKnob %d\n",PowerSwitchOn ? 1 : 0);
+
+    updateConfigFile("PlotterState",userPath,configText);
+
+    g_string_free(configText,TRUE);
+
+
+    gtk_widget_destroy(PlotterWindow);
 
 
 
 }
+
+
+
+static int savedWindowPositionHandler(int nn)
+{
+    int windowXpos,windowYpos;
+    windowXpos = atoi(getField(nn+1));
+    windowYpos = atoi(getField(nn+2));
+    gtk_window_move(GTK_WINDOW(PlotterWindow),windowXpos,windowYpos);
+    return TRUE;
+}
+
+
+static int savedManualButtonHandler(int nn)
+{
+    int n;
+    n = atoi(getField(nn+1));
+    g_info("n=%d\n",n);
+    PlotterManual = (n == 1) ? TRUE : FALSE;
+    knobs[manualKnobNumber].state  = (n == 0) ? 0 : 1;
+    return TRUE;
+}
+
+static int savedPowerKnobHandler(int nn)
+{
+    int n;
+    n = atoi(getField(nn+1));
+    g_info("n=%d\n",n);
+    PowerSwitchOn = (n == 1) ? TRUE : FALSE;
+    knobs[powerKnobNumber].state  = (n == 1) ? 0 : 2;
+    knobs[powerKnobNumber].changed = TRUE;
+    return TRUE;
+}
+
+
+static Token savedStateTokens[] = {
+    {"WindowPosition",0,savedWindowPositionHandler},
+    {"ManualButton",0,savedManualButtonHandler},
+    {"PowerKnob",0,savedPowerKnobHandler},
+    {NULL,0,NULL}
+};
+
+
+
 
 #define KNOB_WIDE 32
 #define KNOB_HIGH 32
@@ -1459,6 +1525,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
 /* POWER knob*/
     knob = &knobs[knobNumber];
+    powerKnobNumber = knobNumber;
 
     knob->type = 1;
     knob->xpos = 0;
@@ -1598,6 +1665,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 /* Manual */
 
     knob = &knobs[knobNumber];
+    manualKnobNumber = knobNumber;
     
     knob->type = 3;    // Press-press Toggle switch
     knob->xpos = 285;
@@ -1648,7 +1716,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     connectWires(TIMER100HZ,fastMovePen);
     connectWires(PTS24VOLTSON,V24changed);
 
+
+    readConfigFile("PlotterState",userPath,savedStateTokens);
+
+    
     gtk_widget_show(PlotterWindow);
+
+
+
+
+
 }
 
 /*
