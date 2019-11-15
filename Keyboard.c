@@ -392,7 +392,7 @@ KeyboardWindowEnterHandler(__attribute__((unused)) int s,
 
     if(EnteredAtX < wide/2)
     {
-	ConfigureRightHandNew(400.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
+	ConfigureRightHandNew(400.0,250.0,SET_TARGETXY|SET_FINGERXY,HAND_EMPTY);
 	if(HandIsEmpty(LeftHand))
 	{
 	    ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_THREE_FINGERS);
@@ -407,7 +407,7 @@ KeyboardWindowEnterHandler(__attribute__((unused)) int s,
     }
     else
     {
-	ConfigureLeftHandNew (100.0,250.0,SET_RESTINGXY|SET_FINGERXY,HAND_THREE_FINGERS);
+	ConfigureLeftHandNew (100.0,250.0,SET_TARGETXY|SET_FINGERXY,HAND_EMPTY);
 	if(HandIsEmpty(RightHand))
 	{
 	    ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_THREE_FINGERS);

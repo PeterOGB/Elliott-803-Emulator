@@ -891,6 +891,7 @@ void swapHands(GtkWidget *drawingArea)
     {
 	ox += ((gint) LeftHandInfo.FingerAtX);
 	oy += ((gint) LeftHandInfo.FingerAtY);
+	//setMouseAtXY(LeftHandInfo.FingerAtX,LeftHandInfo.FingerAtY);
     }
 
     // Warp cursor to right hand
@@ -898,6 +899,7 @@ void swapHands(GtkWidget *drawingArea)
     {
 	ox += ((gint) RightHandInfo.FingerAtX);
 	oy += ((gint) RightHandInfo.FingerAtY);
+	//setMouseAtXY(RightHandInfo.FingerAtX,RightHandInfo.FingerAtY);
     }
 
     gdk_device_warp (gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default())),
