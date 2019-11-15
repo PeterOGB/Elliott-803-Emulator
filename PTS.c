@@ -291,7 +291,6 @@ static gboolean  process_message(GIOChannel *source,
 		    messageLength = 1;
 		    offset = 0;
 		    tapeRxOffset = 0;
-		    PLTStapePosition = 0;
 		    break;
 		case 0x81:
 		    cmd = 0xFF;
