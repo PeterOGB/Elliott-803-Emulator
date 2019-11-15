@@ -1313,7 +1313,14 @@ static void updateDM160s(__attribute__((unused)) unsigned int dummy)
     //printf("%s called\n",__FUNCTION__);
     
     // Copy values from Emualte.c and set flag
-    for(int n=0;n<6;n++) DM160Values[n] = DM160s_bright[n] / 174.0;
+    if(PowerOn && MainsOn)
+    {
+	for(int n=0;n<6;n++) DM160Values[n] = DM160s_bright[n] / 174.0;
+    }
+    else
+    {
+	for(int n=0;n<6;n++) DM160Values[n] = 0.0;
+    }
     DM160sChanged = TRUE;
     if(!InWordGenWindow)
     {
