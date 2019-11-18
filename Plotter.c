@@ -70,6 +70,10 @@ static gboolean PenDown = TRUE;
 static cairo_t *visibleSurfaceCr = NULL;
 static GdkRectangle PaperArea = {0,0,0,0};
 static gboolean PaperLoaded = FALSE;
+static gboolean PaperPositioning = FALSE;
+static gboolean PaperMoving = FALSE;
+static gdouble  PaperMovedByX = 0.0;
+static gdouble  PaperMovedByY = 0.0;
 static cairo_t *paperSurfaceCr = NULL;
 static cairo_t *drumSurfaceCr = NULL;
 
@@ -144,7 +148,7 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
 	ConfigureRightHandNew(400.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,HAND_EMPTY);
 	if(HandIsEmpty(LeftHand))
 	{
-	    ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_THREE_FINGERS);
+	    ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_EMPTY);
 	}
 	else
 	{
@@ -159,7 +163,7 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
 	ConfigureLeftHandNew (100.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,HAND_EMPTY);
 	if(HandIsEmpty(RightHand))
 	{
-	    ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_THREE_FINGERS);
+	    ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_EMPTY);
 	}
 	else
 	{
@@ -383,7 +387,7 @@ on_PlotterDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
 #define DRUM_LEFT 39.0
 #define DRUM_TOP 18.0
 
-static GdkRectangle defaultPaperSize = { PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH};
+static GdkRectangle squarePaperSize = { PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH};
 
 __attribute__((used))
 gboolean
@@ -447,6 +451,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	cairo_paint(drumSurfaceCr);
 
 
+	// Moved to plotterInit
+#if 0	
 	if(paper_pixbuf != NULL)
 	{
 	    cairo_surface_t *paperSurface = NULL;
@@ -459,9 +465,9 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	    cairo_paint(paperSurfaceCr);
 
 	    PaperLoaded = TRUE;
-	    PaperArea = defaultPaperSize;
+	    PaperArea = loadedPaperSize;
 	}
-	    
+#endif	    
 
 
 #if 0
@@ -517,7 +523,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 
 	}
     }
-    // Draw manual button
+    // Draw manual button in the background surface
     {
 	int state;
 //	knob = &knobs[knobCount-1];
@@ -540,7 +546,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     cairo_stroke (drumSurfaceCr);
     counter += 1;
     */
-    
+
+    // Render the background surface
     cairo_set_source_surface (cr, backgroundSurface ,0.0,0.0);
     cairo_paint(cr);
 
@@ -559,6 +566,25 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     cairo_rectangle(cr, DRUM_LEFT, DRUM_TOP,DRUM_WIDE, LINES_VISIBLE);
     cairo_stroke_preserve(cr);
     cairo_fill(cr);
+
+
+    if(PaperPositioning)
+    {
+	int reducedHeight;
+	cairo_set_source_rgba(cr,1.0,1.0,1.0,1.0);
+	if(PaperArea.y+PaperArea.height > LINES_VISIBLE)
+	    reducedHeight = LINES_VISIBLE - PaperArea.y;
+	else
+	    reducedHeight = PaperArea.height;
+
+	//g_debug("reducedHeight = %d\n",reducedHeight);
+	
+	cairo_rectangle(cr, PaperMovedByX+PaperArea.x,PaperMovedByY+PaperArea.y,PaperArea.width,reducedHeight);
+	cairo_stroke_preserve(cr);
+	cairo_fill(cr);
+
+
+    }
 
 
     // Draw carraige support bars
@@ -786,6 +812,17 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 
     }
+    else if( (trackingHand != NULL) && (trackingHand->showingHand == HAND_STICKY_TAPE)  )
+    {
+	trackingHand->showingHand = HAND_EMPTY;
+    }
+    if( (trackingHand != NULL)  && (trackingHand->showingHand == HAND_EMPTY) && PaperPositioning )
+    {
+	g_debug("PRESS %d \n",trackingHand->showingHand);
+	PaperMoving = TRUE;
+    }
+
+    
     return GDK_EVENT_STOP;
 }
 
@@ -851,8 +888,20 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	}
     }
 
+
+
+    // Not needed on theplotter
     // Always release the finger (even if not over a button).
-    if(trackingHand != NULL) trackingHand->FingersPressed &= ~trackingHand->IndexFingerBit;
+    //if(trackingHand != NULL) trackingHand->FingersPressed &= ~trackingHand->IndexFingerBit;
+
+    if(PaperMoving)
+    {
+	PaperMoving = FALSE;
+	PaperArea.x += PaperMovedByX;
+	PaperMovedByX = 0.0;
+	PaperArea.y += PaperMovedByY;
+	PaperMovedByY = 0.0;
+    }
     
     return GDK_EVENT_STOP;
 }
@@ -893,7 +942,8 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     int n,ix,iy;
     enum  handimages showing;
     gdouble hx,hy;
-
+    gboolean overKnob = FALSE;
+    
     //printf("%s called\n",__FUNCTION__);
 
     //movingHand = updateHands(event->x,event->y,&hx,&hy);
@@ -901,9 +951,10 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     ix = (int) hx;
     iy = (int) hy;
 
-    showing = HAND_EMPTY;
-    
+    //showing = HAND_EMPTY;
+    showing = movingHand->showingHand;
 
+ 
     for(n=0;n<knobCount2;n++)
     {
 	if( (ix >= OneFingerAreas[n].x) &&
@@ -911,10 +962,32 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	    (iy >= OneFingerAreas[n].y) &&
 	    (iy <= (OneFingerAreas[n].y+OneFingerAreas[n].height)) )
 	{
-	    showing = HAND_ONE_FINGER;
+	    overKnob = TRUE;
+	    break;
+	    //showing = HAND_ONE_FINGER;
 	}
     }
 
+    if((showing == HAND_EMPTY) && overKnob)
+    {
+	showing = HAND_ONE_FINGER;
+    }
+    if((showing == HAND_ONE_FINGER) && !overKnob)
+    {
+	showing = HAND_EMPTY;
+    }
+    
+
+
+    if(PaperMoving)
+    {
+	g_debug("MOved (%f,%f)\n",hx-FingerPressedAtX,hy-FingerPressedAtY);
+	PaperMovedByX = hx-FingerPressedAtX;
+	PaperMovedByY = hy-FingerPressedAtY;
+    }
+
+
+    
 /*
     if(movingHand->handConstrained == HAND_NOT_CONSTRAINED)
     {
@@ -965,11 +1038,17 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 
     // Save this to detect if the hand has moved off the volume control
     wasOverVolumeControl = overVolumeControl;
-*/	
+*/
+
+
     if(movingHand == &LeftHandInfo)
     {
+	
 	if(LeftHandInfo.showingHand != showing)
+	{
+	    g_debug("Left hand changed\n");
 	    ConfigureLeftHandNew (0.0,0.0,0,showing);
+	}
     }
 
     if(movingHand == &RightHandInfo)
@@ -1205,10 +1284,15 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 {
     
     static cairo_surface_t *paperSurface = NULL;
+    static GdkRectangle Paper = {50,50,200,200};
 
     g_info("squarePaperHandler\n");
 
+    PaperPositioning = TRUE;
+    PaperArea = Paper;
 
+    
+#if 0
     if(PaperLoaded == FALSE)
     {
 	// Put paper onto the drum
@@ -1234,7 +1318,7 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 	cairo_paint(paperSurfaceCr);
 	
 	PaperLoaded = TRUE;
-	PaperArea = defaultPaperSize;
+	PaperArea = squarePaperSize;
     }
     else
     {
@@ -1258,9 +1342,15 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 	PaperLoaded = FALSE;
 
     }
+#endif
 }
 
+static void stickyTapeHandler(__attribute__((unused)) int state)
+{
+    //holdingStikyTape = TRUE;
+    ConfigureLeftHandNew(0.0,0.0,0,HAND_STICKY_TAPE);
 
+}
 
 
 static void powerKnobHandler(int state)
@@ -1350,12 +1440,12 @@ void PlotterTidy(GString *userPath)
     
     cairo_surface_write_to_png (cairo_get_target(drumSurfaceCr),drumFileName->str);
 
-
-    // Eventually will need to save the paper position and size in a config file.
-    g_string_printf(drumFileName,"%s%s",userPath->str,"Paper.png");
-
     if(paperSurfaceCr != NULL)
     {
+	// Eventually will need to save the paper position and size in a config file.
+	g_string_printf(drumFileName,"%s%s",userPath->str,"Paper.png");
+
+
 	cairo_surface_write_to_png (cairo_get_target(paperSurfaceCr),drumFileName->str);
     }
    
@@ -1371,7 +1461,11 @@ void PlotterTidy(GString *userPath)
 
     gtk_window_get_position(GTK_WINDOW(PlotterWindow), &windowXpos, &windowYpos);
     g_string_append_printf(configText,"WindowPosition %d %d\n",windowXpos,windowYpos);
-
+    if(PaperLoaded)
+    {
+	g_string_append_printf(configText,"PaperInfo %d %d %d %d\n",
+			       PaperArea.x,PaperArea.y,PaperArea.width,PaperArea.height);
+    }
     
     // Should probably save them all, but power and manual are the important ones 
     g_string_append_printf(configText,"ManualButton %d\n",PlotterManual ? 1 : 0);
@@ -1399,6 +1493,17 @@ static int savedWindowPositionHandler(int nn)
     return TRUE;
 }
 
+static int savedPaperInfoHandler(int nn)
+{
+    PaperArea.x = atoi(getField(nn+1));
+    PaperArea.y = atoi(getField(nn+2));
+    PaperArea.width = atoi(getField(nn+3));
+    PaperArea.height = atoi(getField(nn+4));
+    PaperLoaded = TRUE;
+    return TRUE;
+}
+
+
 
 static int savedManualButtonHandler(int nn)
 {
@@ -1424,6 +1529,7 @@ static int savedPowerKnobHandler(int nn)
 
 static Token savedStateTokens[] = {
     {"WindowPosition",0,savedWindowPositionHandler},
+    {"PaperInfo",0,savedPaperInfoHandler},
     {"ManualButton",0,savedManualButtonHandler},
     {"PowerKnob",0,savedPowerKnobHandler},
     {NULL,0,NULL}
@@ -1451,7 +1557,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
 
     fileName = g_string_new(NULL);
-    g_string_printf(fileName,"%sgraphics/calcomp.xpm",sharedPath->str);
+    g_string_printf(fileName,"%sgraphics/calcomp.png",sharedPath->str);
     
     background_pixbuf =
 	my_gdk_pixbuf_new_from_file(fileName->str);
@@ -1471,6 +1577,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     g_string_printf(fileName,"%sDrum.png",userPath->str);
     drum_pixbuf =
 	gdk_pixbuf_new_from_file(fileName->str,NULL);
+    
     if(drum_pixbuf == NULL)
     {
 	g_string_printf(fileName,"%sgraphics/Drum.png",sharedPath->str);
@@ -1478,12 +1585,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 	    my_gdk_pixbuf_new_from_file(fileName->str);
     }
 
-    // Null is ok here 
-    g_string_printf(fileName,"%sPaper.png",userPath->str);
-    paper_pixbuf =
-   	gdk_pixbuf_new_from_file(fileName->str,NULL);
 
-	
 
 	
  
@@ -1499,6 +1601,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 	visible_pixbuf =
 	    my_gdk_pixbuf_new_from_file(fileName->str);
     }
+
+    // Paper is loaded after the config file has been read.
     
 
     for(n=0;n<9;n++)
@@ -1698,7 +1802,18 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knob->handler = squarePaperHandler;
 
     knobNumber += 1;
+    /* Sticky tape area  */
+    knob = &knobs[knobNumber];
+    switchArea = &OneFingerAreas[knobNumber];
+    switchArea->x = 477;
+    switchArea->y = 424;	
+    switchArea->width = 38;
+    switchArea->height = 29;
+    knob->handler = stickyTapeHandler;
 
+    knobNumber += 1;
+
+    
     knobCount2 = knobNumber;
     
 
@@ -1706,8 +1821,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     PenY = (PAPER_TOP+PAPER_HIGH);    // 1660 puts pen at 830 
     PenDown = TRUE;
 
-    g_string_free(fileName,TRUE);
-    fileName = NULL;
+
     
     
     connectWires(F72, F72changed);
@@ -1719,6 +1833,41 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
     readConfigFile("PlotterState",userPath,savedStateTokens);
 
+    // If paper size/position had been configured load the high res image.
+    // THe low res version of the paper is already drawn in the visible surface.
+    if(PaperLoaded)
+    {
+	cairo_surface_t *paperSurface = NULL;
+	int w,h;
+	
+	g_string_printf(fileName,"%sPaper.png",userPath->str);
+	paper_pixbuf =
+	    gdk_pixbuf_new_from_file(fileName->str,NULL);
+
+
+	// Check pixbuf is the right size.
+	h = gdk_pixbuf_get_height(paper_pixbuf);
+	w = gdk_pixbuf_get_width(paper_pixbuf); 
+
+	if((h != 2*PaperArea.height) || (w != 2*PaperArea.width))
+	{
+	    g_error("Loaded paper pixbuf size is wrong. (%d,%d) should be (%d,%d)\n",
+		    w,h,2*PaperArea.width,2*PaperArea.height);
+	}
+
+	// THis is the full resolution version so double the dimenstions
+	paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+						  2*PaperArea.width,2*PaperArea.height);
+
+	paperSurfaceCr = cairo_create(paperSurface);
+	gdk_cairo_set_source_pixbuf (paperSurfaceCr, paper_pixbuf ,0.0,0.0);
+	
+	cairo_paint(paperSurfaceCr);
+    }
+    
+
+    g_string_free(fileName,TRUE);
+    fileName = NULL;
     
     gtk_widget_show(PlotterWindow);
 

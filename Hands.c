@@ -43,6 +43,7 @@ static GdkPixbuf *LeftHandHoldingReelThumb_pixbuf;
 static GdkPixbuf *LeftHandPressing_pixbuf;
 static GdkPixbuf *LeftHandOneFingerUp_pixbuf;
 static GdkPixbuf *LeftHandOneFingerDown_pixbuf;
+static GdkPixbuf *LeftHandStickyTape_pixbuf;
 
 static GdkPixbuf  *LeftHandThreeFingers_pixbufs[8];
 static GdkPixbuf *RightHandThreeFingers_pixbufs[8];
@@ -189,6 +190,13 @@ void HandsInit(__attribute__((unused)) GtkBuilder *builder,
     //g_string_printf(fileName,"hands/TESTING.png");
     LeftHandEmpty_pixbuf =
 	my_gdk_pixbuf_new_from_file(fileName->str);
+
+    g_string_printf(fileName,"%shands/LeftHandStickyTape.png",sharedPath->str);
+    //g_string_printf(fileName,"hands/TESTING.png");
+    LeftHandStickyTape_pixbuf =
+	my_gdk_pixbuf_new_from_file(fileName->str);
+
+    
 /*
     //g_string_printf(fileName,"%sgraphics/LNewHand4.png",sharedPath->str);
     g_string_printf(fileName,"%shands/LHandHoldingReel.png",sharedPath->str);
@@ -471,7 +479,12 @@ static void DrawLeftHandNew(cairo_t *cr)
 	drawFingers = TRUE;
 	break;
 
-
+    case HAND_STICKY_TAPE:
+	activeX = -156.0;
+	activeY = -43.0;
+	HandPixbuf = LeftHandStickyTape_pixbuf;
+	drawFingers = TRUE;
+	break;
 /*	
     case HAND_PULLING_TAPE:
 	activeX = 190.0;
@@ -1116,6 +1129,7 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
 	    // Un-constrain the hand.
 	    if(Hand_motion_callback != NULL)
 	    {
+		//g_debug("Hand Constrained\n");
 		(Hand_motion_callback)(&LeftHandInfo);
 	    }
 	}
@@ -1141,7 +1155,7 @@ gboolean timerTick(__attribute__((unused)) gpointer user_data)
 	// Only call the motion handler if the Hand has moved
 	if(hypot(newX-oldX,newY-oldY) >= 0.1)
 	{
-	    //printf("X Moved by %f\n",newX-oldX);
+	    //g_debug("X Moved by %f Y Moved by %f\n",newX-oldX,newY-oldY);
 	    if(Hand_motion_callback != NULL)
 	    {
 		(Hand_motion_callback)(&LeftHandInfo);
