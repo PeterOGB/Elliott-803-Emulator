@@ -44,6 +44,7 @@ static GdkPixbuf *LeftHandPressing_pixbuf;
 static GdkPixbuf *LeftHandOneFingerUp_pixbuf;
 static GdkPixbuf *LeftHandOneFingerDown_pixbuf;
 static GdkPixbuf *LeftHandStickyTape_pixbuf;
+static GdkPixbuf *LeftHandGrabbing_pixbuf;
 
 static GdkPixbuf  *LeftHandThreeFingers_pixbufs[8];
 static GdkPixbuf *RightHandThreeFingers_pixbufs[8];
@@ -195,6 +196,13 @@ void HandsInit(__attribute__((unused)) GtkBuilder *builder,
     //g_string_printf(fileName,"hands/TESTING.png");
     LeftHandStickyTape_pixbuf =
 	my_gdk_pixbuf_new_from_file(fileName->str);
+
+    g_string_printf(fileName,"%shands/LeftHandGrab.png",sharedPath->str);
+    //g_string_printf(fileName,"hands/TESTING.png");
+    LeftHandGrabbing_pixbuf =
+	my_gdk_pixbuf_new_from_file(fileName->str);
+
+
 
     
 /*
@@ -480,11 +488,19 @@ static void DrawLeftHandNew(cairo_t *cr)
 	break;
 
     case HAND_STICKY_TAPE:
-	activeX = -156.0;
-	activeY = -43.0;
+	activeX = -176.0;
+	activeY = -63.0;
 	HandPixbuf = LeftHandStickyTape_pixbuf;
 	drawFingers = TRUE;
 	break;
+
+    case HAND_GRABBING:
+	activeX = -176.0;
+	activeY = -63.0;
+	HandPixbuf = LeftHandGrabbing_pixbuf;
+	drawFingers = TRUE;
+	break;
+	
 /*	
     case HAND_PULLING_TAPE:
 	activeX = 190.0;

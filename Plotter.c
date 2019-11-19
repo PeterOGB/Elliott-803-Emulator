@@ -1,6 +1,7 @@
 #define G_LOG_USE_STRUCTURED
 
 #include <gtk/gtk.h>
+#include <math.h>
 
 #include "Logging.h"
 #include "Plotter.h"
@@ -25,6 +26,7 @@ static GdkPixbuf *manualPixbufs[3];
 static int knobCount,knobCount2;
 static int manualKnobNumber;
 static int powerKnobNumber;
+static int stickyKnobNumber;
 gboolean plotterMoved = FALSE;
 static int drumFastMove = 0;
 static int carriageFastMove = 0;
@@ -199,7 +201,7 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
      // Remove cursor on entry
    
     savedCursor = gdk_window_get_cursor(wep->window);
-    gdk_window_set_cursor(wep->window,blankCursor);
+    //gdk_window_set_cursor(wep->window,blankCursor);
 
     register_hand_motion_callback(on_Hand_motion_event);
     
@@ -802,19 +804,59 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    if((FingerPressedAtX >= left) && (FingerPressedAtX <= right) &&
 	       (FingerPressedAtY >= top) && (FingerPressedAtY <= bottom))
 	    {
-		g_info("Paper area hit\n");
 		if(knobs[areaNumber].handler != NULL) (knobs[areaNumber].handler)(knob->state);
 	    }
-	    
-
-
 	}
 
 
     }
+    // Check to see if placing sticky tape on paper and drum
     else if( (trackingHand != NULL) && (trackingHand->showingHand == HAND_STICKY_TAPE)  )
     {
-	trackingHand->showingHand = HAND_EMPTY;
+	g_debug("PressedAtX=%f PressedAtY=%f %f\n",FingerPressedAtX,FingerPressedAtY,
+		(FingerPressedAtY - PaperArea.y));
+	if( (fabs(FingerPressedAtY - PaperArea.y) < 7.0) &&
+	    (FingerPressedAtX >= PaperArea.x) &&
+	    (FingerPressedAtX <= PaperArea.x+PaperArea.width))
+	{
+	    cairo_surface_t *paperSurface = NULL;
+	    // Put paper onto the drum
+	    cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	    //cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
+	    cairo_rectangle(visibleSurfaceCr,PaperArea.x-32,PaperArea.y,PaperArea.width,PaperArea.height);
+	    cairo_stroke_preserve(visibleSurfaceCr);
+	    cairo_fill(visibleSurfaceCr);
+
+	    // Add duplicate at bottom of surface
+	    cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	    cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
+	    cairo_stroke_preserve(visibleSurfaceCr);
+	    cairo_fill(visibleSurfaceCr);
+
+
+	    // Create full resolution surface for the paper
+	    paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+						      2*PAPER_WIDE,2*PAPER_HIGH);
+
+	    paperSurfaceCr = cairo_create(paperSurface);
+	    // Clear to white
+	    cairo_set_source_rgba(paperSurfaceCr,1.0,1.0,1.0,1.0);
+	    cairo_paint(paperSurfaceCr);
+
+
+	    
+	    trackingHand->showingHand = HAND_EMPTY;
+	    PaperPositioning = FALSE;
+	    PaperMoving = FALSE;
+	}
+
+	
+	
+    }
+    // Check to see if picking up piece of sticky tape
+    else if( (trackingHand != NULL) && (trackingHand->showingHand == HAND_GRABBING)  )
+    {
+	trackingHand->showingHand = HAND_STICKY_TAPE;
     }
     if( (trackingHand != NULL)  && (trackingHand->showingHand == HAND_EMPTY) && PaperPositioning )
     {
@@ -901,6 +943,7 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	PaperMovedByX = 0.0;
 	PaperArea.y += PaperMovedByY;
 	PaperMovedByY = 0.0;
+	g_debug("Paper Top Corner Dropped at (%d,%d)\n",PaperArea.x,PaperArea.y);
     }
     
     return GDK_EVENT_STOP;
@@ -943,6 +986,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     enum  handimages showing;
     gdouble hx,hy;
     gboolean overKnob = FALSE;
+    gboolean overSticky = FALSE;
     
     //printf("%s called\n",__FUNCTION__);
 
@@ -954,7 +998,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     //showing = HAND_EMPTY;
     showing = movingHand->showingHand;
 
- 
+
     for(n=0;n<knobCount2;n++)
     {
 	if( (ix >= OneFingerAreas[n].x) &&
@@ -964,21 +1008,43 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	{
 	    overKnob = TRUE;
 	    break;
-	    //showing = HAND_ONE_FINGER;
 	}
     }
 
-    if((showing == HAND_EMPTY) && overKnob)
+    if( (ix >= OneFingerAreas[stickyKnobNumber].x) &&
+	(ix <= (OneFingerAreas[stickyKnobNumber].x+OneFingerAreas[stickyKnobNumber].width)) &&
+	(iy >= OneFingerAreas[stickyKnobNumber].y) &&
+	(iy <= (OneFingerAreas[stickyKnobNumber].y+OneFingerAreas[stickyKnobNumber].height)) )
     {
-	showing = HAND_ONE_FINGER;
+	overSticky = TRUE;
     }
-    if((showing == HAND_ONE_FINGER) && !overKnob)
-    {
-	showing = HAND_EMPTY;
-    }
+
     
+      
+    if(showing == HAND_EMPTY)
+    {
+	if(overKnob)
+	{
+	    showing = HAND_ONE_FINGER;
+	}
+	if(overSticky)
+	{
+	    showing = HAND_GRABBING;
+	}
+    }
+    else
+    {
+	if( !(overKnob || overSticky) && ( (showing == HAND_ONE_FINGER) || (showing == HAND_GRABBING)))
+	{
+	    showing = HAND_EMPTY;
+	}
+	
+
+    }
 
 
+    
+  
     if(PaperMoving)
     {
 	g_debug("MOved (%f,%f)\n",hx-FingerPressedAtX,hy-FingerPressedAtY);
@@ -1563,7 +1629,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 	my_gdk_pixbuf_new_from_file(fileName->str);
     
     width = gdk_pixbuf_get_width(background_pixbuf);
-    height = gdk_pixbuf_get_height(background_pixbuf);
+    height = gdk_pixbuf_get_height(background_pixbuf) + 200;
 
     gtk_window_set_default_size(GTK_WINDOW(PlotterWindow), width, height);
 
@@ -1766,7 +1832,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     
     knobNumber += 1;
 
-/* Manual */
+    /* Manual */
 
     knob = &knobs[knobNumber];
     manualKnobNumber = knobNumber;
@@ -1793,7 +1859,9 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knobCount = knobNumber;
 
     /* Square Paper Area */
+
     knob = &knobs[knobNumber];
+
     switchArea = &OneFingerAreas[knobNumber];
     switchArea->x = 584;
     switchArea->y = 378;	
@@ -1802,8 +1870,14 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knob->handler = squarePaperHandler;
 
     knobNumber += 1;
+
+    knobCount2 = knobNumber;
+     
     /* Sticky tape area  */
+        
     knob = &knobs[knobNumber];
+    stickyKnobNumber = knobNumber;
+    
     switchArea = &OneFingerAreas[knobNumber];
     switchArea->x = 477;
     switchArea->y = 424;	
@@ -1814,7 +1888,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knobNumber += 1;
 
     
-    knobCount2 = knobNumber;
+   
     
 
     PenX = 100;
