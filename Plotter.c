@@ -573,15 +573,26 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     if(PaperPositioning)
     {
 	int reducedHeight;
-	cairo_set_source_rgba(cr,1.0,1.0,1.0,1.0);
-	if(PaperArea.y+PaperArea.height > LINES_VISIBLE)
-	    reducedHeight = LINES_VISIBLE - PaperArea.y;
-	else
-	    reducedHeight = PaperArea.height;
+	int start;
 
-	//g_debug("reducedHeight = %d\n",reducedHeight);
+	start = PaperMovedByY+PaperArea.y;
+	reducedHeight = 0;
+
+	if(start < DRUM_TOP)
+	{
+	    reducedHeight =  start - DRUM_TOP ;
+	    start = DRUM_TOP;
+	}
 	
-	cairo_rectangle(cr, PaperMovedByX+PaperArea.x,PaperMovedByY+PaperArea.y,PaperArea.width,reducedHeight);
+	cairo_set_source_rgba(cr,0.9,0.9,0.9,1.0);
+	if(start+PaperArea.height >= LINES_VISIBLE+DRUM_TOP)
+	{
+	    reducedHeight += LINES_VISIBLE+DRUM_TOP - (PaperArea.y+PaperMovedByY);
+	}
+	else
+	    reducedHeight += PaperArea.height;
+	
+	cairo_rectangle(cr,PaperMovedByX+PaperArea.x,start,PaperArea.width,reducedHeight);
 	cairo_stroke_preserve(cr);
 	cairo_fill(cr);
 
@@ -820,19 +831,31 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    (FingerPressedAtX <= PaperArea.x+PaperArea.width))
 	{
 	    cairo_surface_t *paperSurface = NULL;
+	    int topLine;
 	    // Put paper onto the drum
-	    cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	    cairo_set_source_rgba(visibleSurfaceCr,0.5,1.0,1.0,1.0);
 	    //cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
-	    cairo_rectangle(visibleSurfaceCr,PaperArea.x-32,PaperArea.y,PaperArea.width,PaperArea.height);
+
+	    topLine = (PenY/2) - MIDDLE_LINE;
+
+
+
+	    cairo_rectangle(visibleSurfaceCr,PaperArea.x-DRUM_LEFT,PaperArea.y+topLine-DRUM_TOP,PaperArea.width,PaperArea.height);
 	    cairo_stroke_preserve(visibleSurfaceCr);
 	    cairo_fill(visibleSurfaceCr);
+
+	    cairo_rectangle(visibleSurfaceCr,PaperArea.x-DRUM_LEFT,DRUM_HIGH+PaperArea.y+topLine-DRUM_TOP,PaperArea.width,PaperArea.height);
+	    cairo_stroke_preserve(visibleSurfaceCr);
+	    cairo_fill(visibleSurfaceCr);
+
+/*
 
 	    // Add duplicate at bottom of surface
 	    cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
 	    cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
 	    cairo_stroke_preserve(visibleSurfaceCr);
 	    cairo_fill(visibleSurfaceCr);
-
+*/
 
 	    // Create full resolution surface for the paper
 	    paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
@@ -860,8 +883,21 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
     }
     if( (trackingHand != NULL)  && (trackingHand->showingHand == HAND_EMPTY) && PaperPositioning )
     {
-	g_debug("PRESS %d \n",trackingHand->showingHand);
-	PaperMoving = TRUE;
+
+	g_debug("PressedAt (%f,%f)  Paper (%d,%d) to (%d,%d)\n",
+		FingerPressedAtX,FingerPressedAtY,
+		PaperArea.x,PaperArea.y,
+		PaperArea.x+PaperArea.width,PaperArea.y+PaperArea.height);
+
+	if((FingerPressedAtX >= PaperArea.x) && (FingerPressedAtX <= PaperArea.x+PaperArea.width) &&
+	   (FingerPressedAtY >= PaperArea.y) && (FingerPressedAtY <= PaperArea.y+PaperArea.height))
+	{	
+	    trackingHand->showingHand = HAND_ALL_FINGERS;
+
+	
+	    g_debug("PRESS %d \n",trackingHand->showingHand);
+	    PaperMoving = TRUE;
+	}
     }
 
     
@@ -944,6 +980,7 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	PaperArea.y += PaperMovedByY;
 	PaperMovedByY = 0.0;
 	g_debug("Paper Top Corner Dropped at (%d,%d)\n",PaperArea.x,PaperArea.y);
+	trackingHand->showingHand = HAND_EMPTY;
     }
     
     return GDK_EVENT_STOP;
@@ -1892,7 +1929,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     
 
     PenX = 100;
-    PenY = (PAPER_TOP+PAPER_HIGH);    // 1660 puts pen at 830 
+    PenY = (PAPER_TOP+PAPER_HIGH);    // 1660 puts pen at 830
+    PenY = 0;
     PenDown = TRUE;
 
 
