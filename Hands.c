@@ -36,6 +36,8 @@ GdkPixbuf *RightHandHoldingReelTop_pixbuf;
 static GdkPixbuf *RightHandPressing_pixbuf;
 static GdkPixbuf *RightHandOneFingerUp_pixbuf;
 static GdkPixbuf *RightHandOneFingerDown_pixbuf;
+static GdkPixbuf *RightHandHoldingPaper_pixbuf;
+
 
 static GdkPixbuf *LeftHandEmpty_pixbuf;
 static GdkPixbuf *LeftHandHoldingReel_pixbuf;
@@ -45,6 +47,8 @@ static GdkPixbuf *LeftHandOneFingerUp_pixbuf;
 static GdkPixbuf *LeftHandOneFingerDown_pixbuf;
 static GdkPixbuf *LeftHandStickyTape_pixbuf;
 static GdkPixbuf *LeftHandGrabbing_pixbuf;
+static GdkPixbuf *LeftHandHoldingPaper_pixbuf;
+
 
 static GdkPixbuf  *LeftHandThreeFingers_pixbufs[8];
 static GdkPixbuf *RightHandThreeFingers_pixbufs[8];
@@ -180,6 +184,13 @@ void HandsInit(__attribute__((unused)) GtkBuilder *builder,
     g_string_printf(fileName,"%shands/RightHandOneFingerDown.png",sharedPath->str);
     RightHandOneFingerDown_pixbuf =
 	my_gdk_pixbuf_new_from_file(fileName->str);
+
+
+    g_string_printf(fileName,"%shands/RightHandHoldingPaper.png",sharedPath->str);
+    RightHandHoldingPaper_pixbuf =
+	my_gdk_pixbuf_new_from_file(fileName->str);
+
+    
     
     //g_string_printf(fileName,"hands/RightHandThreeFingersDown.png");
     //RightHandThreeFingersDown_pixbuf =
@@ -202,8 +213,9 @@ void HandsInit(__attribute__((unused)) GtkBuilder *builder,
     LeftHandGrabbing_pixbuf =
 	my_gdk_pixbuf_new_from_file(fileName->str);
 
-
-
+    g_string_printf(fileName,"%shands/LeftHandHoldingPaper.png",sharedPath->str);
+    LeftHandHoldingPaper_pixbuf =
+	my_gdk_pixbuf_new_from_file(fileName->str);
     
 /*
     //g_string_printf(fileName,"%sgraphics/LNewHand4.png",sharedPath->str);
@@ -352,7 +364,8 @@ void ConfigureHand(HandInfo *hand,
 	hand->AnimateFromX = x;
 	hand->AnimateFromY = y;
     }
-    hand->showingHand = showing;
+    if(showing != HAND_NO_CHANGE)
+	hand->showingHand = showing;
 }
 
 void ConfigureRightHandNew(gdouble x,gdouble y,int controlBits,
@@ -500,7 +513,13 @@ static void DrawLeftHandNew(cairo_t *cr)
 	HandPixbuf = LeftHandGrabbing_pixbuf;
 	drawFingers = TRUE;
 	break;
-	
+
+    case HAND_HOLDING_PAPER:
+	activeX = -176.0+45.0;
+	activeY = -59.0;
+	HandPixbuf = LeftHandHoldingPaper_pixbuf;
+    	drawFingers = TRUE;
+	break;
 /*	
     case HAND_PULLING_TAPE:
 	activeX = 190.0;
@@ -679,6 +698,13 @@ static void DrawRightHandNew(cairo_t *cr)
 	drawFingers = TRUE;
 	break;
 
+
+    case HAND_HOLDING_PAPER:
+	activeX = -65.0;
+	activeY = -59.0;
+	HandPixbuf = RightHandHoldingPaper_pixbuf;
+    	drawFingers = TRUE;
+	break;
 	
 /*
   case HAND_HOLDING_REEL_TOP:
@@ -874,20 +900,36 @@ static void DrawRightHandNew(cairo_t *cr)
     }
 #endif
 
-
+extern HandInfo *handHoldingPaper;
 void DrawHandsNew(cairo_t *cr)
 {
-    if(LeftHandInfo.Fsm->state == TRACKING_HAND)
+    if(handHoldingPaper != NULL)
     {
-	DrawRightHandNew(cr);
-	DrawLeftHandNew(cr);
+	// Make sure non-paper-holding hand is drawn last
+	if(handHoldingPaper == &LeftHandInfo)
+	{
+	    DrawLeftHandNew(cr);
+	    DrawRightHandNew(cr);	    
+	}
+	else
+	{
+	    DrawRightHandNew(cr);
+	    DrawLeftHandNew(cr);
+	}
     }
-    else 
+    else
     {
-	DrawLeftHandNew(cr);
-	DrawRightHandNew(cr);
+	if(LeftHandInfo.Fsm->state == TRACKING_HAND)
+	{
+	    DrawRightHandNew(cr);
+	    DrawLeftHandNew(cr);
+	}
+	else 
+	{
+	    DrawLeftHandNew(cr);
+	    DrawRightHandNew(cr);
+	}
     }
-    
 }
 
 

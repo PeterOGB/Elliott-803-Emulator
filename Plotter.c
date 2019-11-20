@@ -37,8 +37,8 @@ static gboolean PlotterManual = FALSE;
 static gboolean V24On = FALSE;
 
 static guint32 exitTimeStamp;
-static gdouble LeftHandExitedAtX,LeftHandExitedAtY;
-static gdouble RightHandExitedAtX,RightHandExitedAtY;
+//static gdouble LeftHandExitedAtX,LeftHandExitedAtY;
+//static gdouble RightHandExitedAtX,RightHandExitedAtY;
 static gdouble FingerPressedAtX = 0,FingerPressedAtY = 0;
 static gboolean warpToLeftHand = FALSE;
 static gboolean warpToRightHand = FALSE;
@@ -49,6 +49,8 @@ static GList *pressedKeys = NULL;
 static GdkSeat *seat = NULL;
 
 static GdkRectangle OneFingerAreas[20];
+// Not static so that DrawHandsNew can read it.
+HandInfo *handHoldingPaper = NULL;
 
 
 
@@ -99,7 +101,8 @@ on_PlotterDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
 				    __attribute__((unused)) GdkEventCrossing *event,
 				    __attribute__((unused)) gpointer data);
 
-static void on_Hand_motion_event(HandInfo *MovingHand);
+static
+void on_Hand_motion_event(HandInfo *MovingHand);
 
 static 
 void warpToFinger(GdkWindow *win,HandInfo *hand);
@@ -121,6 +124,90 @@ gboolean
 on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *drawingArea,
 					   __attribute__((unused)) GdkEventButton *event,
 					   __attribute__((unused)) gpointer data);
+
+
+
+
+
+enum PlotterStates {PLOTTER_NO_PAPER,PLOTTER_HOLDING_BELOW,PLOTTER_HOLDING_ABOVE,PLOTTER_DROPPED,
+		    PLOTTER_POSITIONING,PLOTTER_STICKY1,PLOTTER_BOTTOM_FIXED,PLOTTER_STICKY2,
+		    PLOTTER_BOTH_FIXED,PLOTTER_TOP_FIXED,PLOTTER_STICKY3,PLOTTER_TOP_FREE,
+		    PLOTTER_BOTTOM_FREE,PLOTTER_BOTH_FREE,PLOTTER_POSITIONING2,PLOTTER_PAPER_REMOVED};
+
+const char *PlotterStateNames[] =
+    {"PLOTTER_NO_PAPER","PLOTTER_HOLDING_BELOW","PLOTTER_HOLDING_ABOVE","PLOTTER_DROPPED",
+     "PLOTTER_POSITIONING","PLOTTER_STICKY1","PLOTTER_BOTTOM_FIXED","PLOTTER_STICKY2",
+     "PLOTTER_BOTH_FIXED","PLOTTER_TOP_FIXED","PLOTTER_STICKY3","PLOTTER_TOP_FREE",
+     "PLOTTER_BOTTOM_FREE","PLOTTER_BOTH_FREE","PLOTTER_POSITIONING2","PLOTTER_PARER_REMOVED"};
+
+
+enum PlotterEvents {PLOTTER_PRESS_NEW_PAPER,PLOTTER_ABOVE_CARRIAGE,PLOTTER_BELOW_CARRIAGE,
+		    PLOTTER_DROP_PAPER,PLOTTER_PAPER_PRESS,
+		    PLOTTER_PAPER_RELEASE,PLOTTER_PRESS_STICKY,PLOTTER_PRESS_BOTTOM_EDGE,PLOTTER_PRESS_TOP_EDGE,
+		    PLOTTER_PRESS_CORNER};
+
+const char *PlotterEventNames[] =
+{"PLOTTER_PRESS_NEW_PAPER","PLOTTER_ABOVE_CARRIAGE","PLOTTER_BELOW_CARRIAGE",
+ "PLOTTER_DROP_PAPER","PLOTTER_PAPER_PRESS",
+ "PLOTTER_PAPER_RELEASE","PLOTTER_PRESS_STICKY","PLOTTER_PRESS_BOTTOM_EDGE","PLOTTER_PRESS_TOP_EDGE",
+ "PLOTTER_PRESS_CORNER"};
+
+
+
+struct fsmtable PlotterPaperTable[] = {
+
+    {PLOTTER_NO_PAPER,         PLOTTER_PRESS_NEW_PAPER,    PLOTTER_HOLDING_BELOW,     NULL},
+
+    {PLOTTER_HOLDING_BELOW,    PLOTTER_ABOVE_CARRIAGE,     PLOTTER_HOLDING_ABOVE,     NULL},
+
+    {PLOTTER_HOLDING_ABOVE,    PLOTTER_BELOW_CARRIAGE,     PLOTTER_HOLDING_BELOW,     NULL},
+    {PLOTTER_HOLDING_ABOVE,    PLOTTER_DROP_PAPER,         PLOTTER_DROPPED,           NULL},
+    
+    {PLOTTER_DROPPED,          PLOTTER_PAPER_PRESS,        PLOTTER_POSITIONING,       NULL},
+    {PLOTTER_DROPPED,          PLOTTER_PRESS_STICKY,       PLOTTER_STICKY1,           NULL},
+    
+    {PLOTTER_POSITIONING,      PLOTTER_PAPER_RELEASE,      PLOTTER_DROPPED,           NULL},
+
+    {PLOTTER_STICKY1,          PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTTOM_FIXED,      NULL},
+    {PLOTTER_STICKY1,          PLOTTER_PRESS_TOP_EDGE,    PLOTTER_TOP_FIXED,         NULL},
+
+    {PLOTTER_BOTTOM_FIXED,     PLOTTER_PRESS_STICKY,       PLOTTER_STICKY2,           NULL},
+
+    {PLOTTER_STICKY2,          PLOTTER_PRESS_TOP_EDGE,     PLOTTER_BOTH_FIXED,        NULL},
+
+    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTTOM_FREE,       NULL},
+    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_TOP_EDGE,     PLOTTER_TOP_FREE,          NULL},
+    
+    {PLOTTER_TOP_FIXED,        PLOTTER_PRESS_STICKY,       PLOTTER_STICKY3,           NULL},
+
+    {PLOTTER_STICKY3,          PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTH_FIXED,        NULL},
+
+    {PLOTTER_TOP_FREE,         PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTH_FREE,         NULL},
+
+    {PLOTTER_BOTTOM_FREE,      PLOTTER_PRESS_TOP_EDGE,     PLOTTER_BOTH_FREE,         NULL},
+
+    {PLOTTER_BOTH_FREE,        PLOTTER_PAPER_PRESS,        PLOTTER_POSITIONING2,      NULL},
+    {PLOTTER_BOTH_FREE,        PLOTTER_PRESS_CORNER,       PLOTTER_PAPER_REMOVED,     NULL},
+
+    {PLOTTER_POSITIONING2,     PLOTTER_DROP_PAPER,         PLOTTER_BOTH_FREE,         NULL},
+
+    {PLOTTER_PAPER_REMOVED,    PLOTTER_PRESS_NEW_PAPER,    PLOTTER_NO_PAPER,          NULL},
+
+    {-1,-1,-1,NULL}
+};
+
+struct fsm PlotterPaperFSM = { "Plotter FSM",0, PlotterPaperTable ,
+			 PlotterStateNames,PlotterEventNames,1,-1};
+
+     
+
+
+
+
+
+
+
+
 
 static int
 PlotterWindowEnterHandler(__attribute__((unused)) int s,
@@ -147,7 +234,9 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
 
     if(EnteredAtX < wide/2)
     {
-	ConfigureRightHandNew(400.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,HAND_EMPTY);
+	ConfigureRightHandNew(400.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,HAND_NO_CHANGE);
+	ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_NO_CHANGE);
+	/*
 	if(HandIsEmpty(LeftHand))
 	{
 	    ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_EMPTY);
@@ -156,13 +245,16 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
 	{
 	    ConfigureLeftHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_HOLDING_REEL);
 	}
+	*/
 	setLeftHandMode (TRACKING_HAND);
 	setRightHandMode(IDLE_HAND);
-	SetActiveWindow(PLOTTERWINDOW);
+	
     }
     else
     {
-	ConfigureLeftHandNew (100.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,HAND_EMPTY);
+	ConfigureLeftHandNew (100.0,250.0,SET_TARGETXY|SET_RESTINGXY|SET_FINGERXY,HAND_NO_CHANGE);
+	ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_NO_CHANGE);
+	/*
 	if(HandIsEmpty(RightHand))
 	{
 	    ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_EMPTY);
@@ -171,11 +263,12 @@ PlotterWindowEnterHandler(__attribute__((unused)) int s,
 	{
 	    ConfigureRightHandNew(EnteredAtX,EnteredAtY,SET_TARGETXY|SET_FINGERXY,HAND_HOLDING_REEL);
 	}
+	*/
 	setRightHandMode (TRACKING_HAND);
 	setLeftHandMode(IDLE_HAND);
-	SetActiveWindow(PLOTTERWINDOW);
+	
     }
-
+    SetActiveWindow(PLOTTERWINDOW);
 
     
     // Stop hand being released immediatly after entering the window.
@@ -264,8 +357,8 @@ PlotterWinowLeaveHandler(__attribute__((unused)) int s,
     exitTimeStamp = ((GdkEventCrossing *)wep->data)->time;
     
 
-    getTrackingXY2(&LeftHandInfo,&LeftHandExitedAtX,&LeftHandExitedAtY);
-    getTrackingXY2(&RightHandInfo,&RightHandExitedAtX,&RightHandExitedAtY);
+    //getTrackingXY2(&LeftHandInfo,&LeftHandExitedAtX,&LeftHandExitedAtY);
+    //getTrackingXY2(&RightHandInfo,&RightHandExitedAtX,&RightHandExitedAtY);
 
     //printf("%s TIME: %"PRIu32" %f %f \n",__FUNCTION__,exitTimeStamp,wep->eventX,wep->eventY);
     
@@ -583,6 +676,43 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     cairo_fill(cr);
 
 
+    if( (PlotterPaperFSM.state == PLOTTER_POSITIONING) ||
+	(PlotterPaperFSM.state == PLOTTER_POSITIONING2)||
+	(PlotterPaperFSM.state == PLOTTER_DROPPED)
+	)
+    {
+	int reducedHeight;
+	int end;
+
+	end = PaperMovedByY+PaperArea.y ;
+	reducedHeight = PaperArea.height;
+
+	if(end-PaperArea.height  < DRUM_TOP)
+	{
+	    reducedHeight -= DRUM_TOP - (end-PaperArea.height);
+	    //start = DRUM_TOP;
+	}
+	
+	cairo_set_source_rgba(cr,0.9,0.9,0.9,1.0);
+	/*
+	if(start+PaperArea.height >= LINES_VISIBLE+DRUM_TOP)
+	{
+	    reducedHeight += LINES_VISIBLE+DRUM_TOP - (PaperArea.y+PaperMovedByY);
+	}
+	else
+	    reducedHeight += PaperArea.height;
+	*/
+	
+	cairo_rectangle(cr,PaperMovedByX+PaperArea.x,end,PaperArea.width,-reducedHeight);
+	cairo_stroke_preserve(cr);
+	cairo_fill(cr);
+
+    }
+
+
+
+/* OLd version that draws the paper below the point */
+/*
     if(PaperPositioning)
     {
 	int reducedHeight;
@@ -611,7 +741,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 
 
     }
-
+*/
 
     // Draw carraige support bars
     {
@@ -654,6 +784,27 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     cairo_rectangle(cr, DRUM_LEFT+(PenX/2),  DRUM_TOP+MIDDLE_LINE-32.0, 64.0, 64.0);
     cairo_stroke_preserve(cr);
     cairo_fill(cr);
+
+   
+    if( InPlotterWindow &&
+	((PlotterPaperFSM.state == PLOTTER_HOLDING_BELOW) ||
+	 (PlotterPaperFSM.state == PLOTTER_HOLDING_ABOVE) ||
+	 (PlotterPaperFSM.state == PLOTTER_PAPER_REMOVED) ) )
+    {
+	gdouble x,y;
+	// Draw the paper being held by the hand.
+	getTrackingXY2(handHoldingPaper,&x,&y);
+	
+	cairo_set_source_rgba(cr,1.0,1.0,1.0,1.0);
+	if(handHoldingPaper == &LeftHandInfo)
+	    cairo_rectangle(cr,x,y,PaperArea.width,-PaperArea.height);
+	else
+	    cairo_rectangle(cr,x,y,-PaperArea.width,-PaperArea.height);
+	cairo_stroke_preserve(cr);
+	cairo_fill(cr);
+
+    }
+
     
     if(InPlotterWindow)
 	DrawHandsNew(cr); 
@@ -894,7 +1045,9 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
     {
 	trackingHand->showingHand = HAND_STICKY_TAPE;
     }
-    if( (trackingHand != NULL)  && (trackingHand->showingHand == HAND_EMPTY) && PaperPositioning )
+    
+    if( (trackingHand != NULL)  && (trackingHand->showingHand == HAND_EMPTY) &&
+	(PlotterPaperFSM.state == PLOTTER_DROPPED) )
     {
 
 	g_debug("PressedAt (%f,%f)  Paper (%d,%d) to (%d,%d)\n",
@@ -903,16 +1056,28 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		PaperArea.x+PaperArea.width,PaperArea.y+PaperArea.height);
 
 	if((FingerPressedAtX >= PaperArea.x) && (FingerPressedAtX <= PaperArea.x+PaperArea.width) &&
-	   (FingerPressedAtY >= PaperArea.y) && (FingerPressedAtY <= PaperArea.y+PaperArea.height))
+	   (FingerPressedAtY <= PaperArea.y) && (FingerPressedAtY >= PaperArea.y-PaperArea.height))
 	{	
 	    trackingHand->showingHand = HAND_ALL_FINGERS;
-
+	    doFSM(&PlotterPaperFSM,PLOTTER_PAPER_PRESS,NULL);
 	
 	    g_debug("PRESS %d \n",trackingHand->showingHand);
-	    PaperMoving = TRUE;
+	    //PaperMoving = TRUE;
 	}
     }
 
+    // Look for paper being dropped in top half.
+    if(PlotterPaperFSM.state == PLOTTER_HOLDING_ABOVE)
+    {
+	doFSM(&PlotterPaperFSM,PLOTTER_DROP_PAPER,NULL);
+	ConfigureHand(trackingHand,0.0,0.0,0,HAND_EMPTY);
+
+	PaperArea.x = FingerPressedAtX;
+	PaperArea.y = FingerPressedAtY;
+	PaperMovedByX = PaperMovedByY = 0.0;
+	
+    }
+    
     
     return GDK_EVENT_STOP;
 }
@@ -985,7 +1150,8 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
     // Always release the finger (even if not over a button).
     //if(trackingHand != NULL) trackingHand->FingersPressed &= ~trackingHand->IndexFingerBit;
 
-    if(PaperMoving)
+    if( (PlotterPaperFSM.state == PLOTTER_POSITIONING) ||
+	(PlotterPaperFSM.state == PLOTTER_POSITIONING2) )
     {
 	PaperMoving = FALSE;
 	PaperArea.x += PaperMovedByX;
@@ -993,6 +1159,7 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	PaperArea.y += PaperMovedByY;
 	PaperMovedByY = 0.0;
 	g_debug("Paper Top Corner Dropped at (%d,%d)\n",PaperArea.x,PaperArea.y);
+	doFSM(&PlotterPaperFSM,PLOTTER_PAPER_RELEASE,NULL);
 	trackingHand->showingHand = HAND_EMPTY;
     }
 
@@ -1105,7 +1272,8 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 
     
   
-    if(PaperMoving)
+    if( (PlotterPaperFSM.state == PLOTTER_POSITIONING) ||
+	(PlotterPaperFSM.state == PLOTTER_POSITIONING2))
     {
 	g_debug("MOved (%f,%f)\n",hx-FingerPressedAtX,hy-FingerPressedAtY);
 	PaperMovedByX = hx-FingerPressedAtX;
@@ -1113,7 +1281,28 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     }
 
 
-    
+
+
+    if( (PlotterPaperFSM.state == PLOTTER_HOLDING_BELOW) ||
+	(PlotterPaperFSM.state == PLOTTER_HOLDING_ABOVE) )
+    {
+
+	g_debug("hy = %f\n",hy);
+	
+	if( (PlotterPaperFSM.state == PLOTTER_HOLDING_BELOW) && (hy < 150.0))
+	{
+	    doFSM(&PlotterPaperFSM,PLOTTER_ABOVE_CARRIAGE,NULL);
+	}
+	if( (PlotterPaperFSM.state == PLOTTER_HOLDING_ABOVE) && (hy > 150.0))
+	{
+	    doFSM(&PlotterPaperFSM,PLOTTER_BELOW_CARRIAGE,NULL);
+	}
+	
+
+
+    }
+
+/*    
 
     if((movingHand->handConstrained == HAND_NOT_CONSTRAINED) && PaperMoving)
     {
@@ -1128,7 +1317,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 
     }
 
-/*
+
 	if(movingHand->FingersPressed != 0)
 	{
 	    if(!overVolumeControl && !wasOverVolumeControl)
@@ -1423,12 +1612,24 @@ static void squarePaperHandler(__attribute__((unused)) int state)
     
     static cairo_surface_t *paperSurface = NULL;
     static GdkRectangle Paper = {150,50,200,200};
+    HandInfo *trackingHand;
 
     g_info("squarePaperHandler\n");
 
-    PaperPositioning = TRUE;
-    PaperArea = Paper;
+    if(handHoldingPaper == NULL)
+    {
+	trackingHand = getTrackingXY(&FingerPressedAtX,&FingerPressedAtY);
+	handHoldingPaper = trackingHand;
+	ConfigureHand(trackingHand,0.0,0.0,0,HAND_HOLDING_PAPER);
 
+
+    
+	doFSM(&PlotterPaperFSM,PLOTTER_PRESS_NEW_PAPER,NULL);
+    
+
+	//PaperPositioning = TRUE;
+	PaperArea = Paper;
+    }
     
 #if 0
     if(PaperLoaded == FALSE)
@@ -2023,74 +2224,3 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
 
 }
-
-enum PlotterStates {PLOTTER_NO_PAPER,PLOTTER_HOLDING_BELOW,PLOTTER_HOLDING_ABOVE,PLOTTER_DROPPED,
-		    PLOTTER_POSITIONING,PLOTTER_STICKY1,PLOTTER_BOTTOM_FIXED,PLOTTER_STICKY2,
-		    PLOTTER_BOTH_FIXED,PLOTTER_TOP_FIXED,PLOTTER_STICKY3,PLOTTER_TOP_FREE,
-		    PLOTTER_BOTTOM_FREE,PLOTTER_BOTH_FREE,PLOTTER_POSITIONING2,PLOTTER_PARER_REMOVED};
-
-const char *PlotterStateNames[] =
-    {"PLOTTER_NO_PAPER","PLOTTER_HOLDING_BELOW","PLOTTER_HOLDING_ABOVE","PLOTTER_DROPPED",
-     "PLOTTER_POSITIONING","PLOTTER_STICKY1","PLOTTER_BOTTOM_FIXED","PLOTTER_STICKY2",
-     "PLOTTER_BOTH_FIXED","PLOTTER_TOP_FIXED","PLOTTER_STICKY3","PLOTTER_TOP_FREE",
-     "PLOTTER_BOTTOM_FREE","PLOTTER_BOTH_FREE","PLOTTER_POSITIONING2","PLOTTER_PARER_REMOVED"};
-
-
-enum PlotterEvents {PLOTTER_PRESS_NEW_PAPER,PLOTTER_ABOVE_CARRIAGE,PLOTTER_BELOW_CARRIAGE,
-		    PLOTTER_DROP_PAPER,PLOTTER_PAPER_PRESS,
-		    PLOTTER_PAPER_RELEASE,PLOTTER_PRESS_STICKY,PLOTTER_PRESS_BOTTOM_EDGE,PLOTTER_PRESS_TOP_EDGE,
-		    PLOTTER_PRESS_CORNER};
-
-const char *PlotterEvetNames[] =
-{"PLOTTER_PRESS_NEW_PAPER","PLOTTER_ABOVE_CARRIAGE","PLOTTER_BELOW_CARRIAGE",
- "PLOTTER_DROP_PAPER","PLOTTER_PAPER_PRESS",
- "PLOTTER_PAPER_RELEASE","PLOTTER_PRESS_STICKY","PLOTTER_PRESS_BOTTOM_EDGE","PLOTTER_PRESS_TOP_EDGE",
- "PLOTTER_PRESS_CORNER"};
-
-
-
-struct fsmtable PlotterPaperTable[] = {
-
-    {PLOTTER_NO_PAPER,         PLOTTER_PRESS_NEW_PAPER,    PLOTTER_HOLDING_BELOW,     NULL},
-
-    {PLOTTER_HOLDING_BELOW,    PLOTTER_ABOVE_CARRIAGE,     PLOTTER_HOLDING_ABOVE,     NULL},
-
-    {PLOTTER_HOLDING_ABOVE,    PLOTTER_BELOW_CARRIAGE,     PLOTTER_HOLDING_BELOW,     NULL},
-    {PLOTTER_HOLDING_ABOVE,    PLOTTER_DROP_PAPER,         PLOTTER_DROPPED,           NULL},
-    
-    {PLOTTER_DROPPED,          PLOTTER_PAPER_PRESS,        PLOTTER_POSITIONING,       NULL},
-    {PLOTTER_DROPPED,          PLOTTER_PRESS_STICKY,       PLOTTER_STICKY1,           NULL},
-    
-    {PLOTTER_POSITIONING,      PLOTTER_PAPER_RELEASE,      PLOTTER_DROPPED,           NULL},
-
-    {PLOTTER_STICKY1,          PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTTOM_FIXED,      NULL},
-    {PLOTTER_STICKY1,          PLOTTER_PRESS_TOP_EDGE},    PLOTTER_TOP_FIXED,         NULL},
-
-    {PLOTTER_BOTTOM_FIXED,     PLOTTER_PRESS_STICKY,       PLOTTER_STICKY2,           NULL},
-
-    {PLOTTER_STICKY2,          PLOTTER_PRESS_TOP_EDGE,     PLOTTER_BOTH_FIXED,        NULL},
-
-    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTTOM_FREE,       NULL},
-    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_TOP_EDGE,     PLOTTER_TOP_FREE,          NULL},
-    
-    {PLOTTER_TOP_FIXED,        PLOTTER_PRESS_STICKY,       PLOTTER_STICKY3,           NULL},
-
-    {PLOTTER_STICKY3,          PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTH_FIXED,        NULL},
-
-    {PLOTTER_TOP_FREE,         PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTH_FREE,         NULL},
-
-    {PLOTTER_BOTTOM_FREE,      PLOTTER_PRESS_TOP_EDGE,     PLOTTER_BOTH_FREE,         NULL},
-
-    {PLOTTER_BOTH_FREE,        PLOTTER_PAPER_PRESS,        PLOTTER_POSITIONING2,      NULL},
-    {PLOTTER_BOTH_FREE,        PLOTTER_PRESS_CORNER,       PLOTTER_PARER_REMOVED,     NULL,
-
-    {PLOTTER_POSITIONING2,     PLOTTER_DROP_PAPER,         PLOTTER_BOTH_FREE,         NULL},
-
-    {PLOTTER_PARER_REMOVED,    PLOTTER_PRESS_NEW_PAPER,    PLOTTER_NO_PAPER,          NULL},
-
-    {-1,-1,-1,NULL}
-};
-
-    
-
-     
