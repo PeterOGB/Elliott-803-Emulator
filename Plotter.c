@@ -289,17 +289,30 @@ PlotterWinowLeaveHandler(__attribute__((unused)) int s,
     return -1;
 }
 
+static int
+PlotterWindowUnconstrainedHandler(__attribute__((unused)) int s,
+				   __attribute__((unused)) int e,
+				   void *p)
+{
+    struct WindowEvent *wep  = (struct WindowEvent *) p;
 
+    warpToFinger(wep->window,(HandInfo *)wep->data);
+    
+
+    return(-1);
+}
 
 static struct fsmtable PlotterWindowTable[] = {
     {OUTSIDE_WINDOW,           FSM_ENTER,           INSIDE_WINDOW,            PlotterWindowEnterHandler},
     
     {INSIDE_WINDOW,            FSM_LEAVE,           OUTSIDE_WINDOW,           PlotterWinowLeaveHandler},
-
+    {INSIDE_WINDOW,            FSM_CONSTRAINED,     CONSTRAINED_INSIDE,       NULL},
+    
+    {CONSTRAINED_INSIDE,       FSM_UNCONSTRAINED,   INSIDE_WINDOW,            PlotterWindowUnconstrainedHandler},
 
     // Leave this here incase the hand needs to be constrained 
 /*
-    {INSIDE_WINDOW,            FSM_CONSTRAINED,     CONSTRAINED_INSIDE,       NULL}, 
+   
     
     {CONSTRAINED_INSIDE,       FSM_UNCONSTRAINED,   INSIDE_WINDOW,            KeyboardWindowUnconstrainedHandler},
     {CONSTRAINED_INSIDE,       FSM_LEAVE,           CONSTRAINED_OUTSIDE,      NULL},
@@ -982,6 +995,16 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	g_debug("Paper Top Corner Dropped at (%d,%d)\n",PaperArea.x,PaperArea.y);
 	trackingHand->showingHand = HAND_EMPTY;
     }
+
+    if((trackingHand != NULL) && (trackingHand->handConstrained != HAND_NOT_CONSTRAINED))
+//	&& PaperMoving )
+    {
+	struct WindowEvent we = {PLOTTERWINDOW,0,0,event->window,(gpointer) trackingHand};
+	trackingHand->handConstrained = HAND_NOT_CONSTRAINED;
+	doFSM(&PlotterWindowFSM,FSM_UNCONSTRAINED,(void *)&we);
+    }
+
+
     
     return GDK_EVENT_STOP;
 }
@@ -1091,9 +1114,21 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 
 
     
-/*
-    if(movingHand->handConstrained == HAND_NOT_CONSTRAINED)
+
+    if((movingHand->handConstrained == HAND_NOT_CONSTRAINED) && PaperMoving)
     {
+	if((PaperArea.x + PaperMovedByX - 32) < DRUM_LEFT)
+	{
+
+	    movingHand->handConstrained = HAND_CONSTRAINED_BY_PRESS;
+	    printf("*************** CONSTRAINED *********************\n");
+	    doFSM(&PlotterWindowFSM,FSM_CONSTRAINED,NULL);
+
+	}
+
+    }
+
+/*
 	if(movingHand->FingersPressed != 0)
 	{
 	    if(!overVolumeControl && !wasOverVolumeControl)
@@ -1387,7 +1422,7 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 {
     
     static cairo_surface_t *paperSurface = NULL;
-    static GdkRectangle Paper = {50,50,200,200};
+    static GdkRectangle Paper = {150,50,200,200};
 
     g_info("squarePaperHandler\n");
 
@@ -1989,9 +2024,73 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
 }
 
-/*
-  on_plotterDrawingArea_draw
+enum PlotterStates {PLOTTER_NO_PAPER,PLOTTER_HOLDING_BELOW,PLOTTER_HOLDING_ABOVE,PLOTTER_DROPPED,
+		    PLOTTER_POSITIONING,PLOTTER_STICKY1,PLOTTER_BOTTOM_FIXED,PLOTTER_STICKY2,
+		    PLOTTER_BOTH_FIXED,PLOTTER_TOP_FIXED,PLOTTER_STICKY3,PLOTTER_TOP_FREE,
+		    PLOTTER_BOTTOM_FREE,PLOTTER_BOTH_FREE,PLOTTER_POSITIONING2,PLOTTER_PARER_REMOVED};
+
+const char *PlotterStateNames[] =
+    {"PLOTTER_NO_PAPER","PLOTTER_HOLDING_BELOW","PLOTTER_HOLDING_ABOVE","PLOTTER_DROPPED",
+     "PLOTTER_POSITIONING","PLOTTER_STICKY1","PLOTTER_BOTTOM_FIXED","PLOTTER_STICKY2",
+     "PLOTTER_BOTH_FIXED","PLOTTER_TOP_FIXED","PLOTTER_STICKY3","PLOTTER_TOP_FREE",
+     "PLOTTER_BOTTOM_FREE","PLOTTER_BOTH_FREE","PLOTTER_POSITIONING2","PLOTTER_PARER_REMOVED"};
+
+
+enum PlotterEvents {PLOTTER_PRESS_NEW_PAPER,PLOTTER_ABOVE_CARRIAGE,PLOTTER_BELOW_CARRIAGE,
+		    PLOTTER_DROP_PAPER,PLOTTER_PAPER_PRESS,
+		    PLOTTER_PAPER_RELEASE,PLOTTER_PRESS_STICKY,PLOTTER_PRESS_BOTTOM_EDGE,PLOTTER_PRESS_TOP_EDGE,
+		    PLOTTER_PRESS_CORNER};
+
+const char *PlotterEvetNames[] =
+{"PLOTTER_PRESS_NEW_PAPER","PLOTTER_ABOVE_CARRIAGE","PLOTTER_BELOW_CARRIAGE",
+ "PLOTTER_DROP_PAPER","PLOTTER_PAPER_PRESS",
+ "PLOTTER_PAPER_RELEASE","PLOTTER_PRESS_STICKY","PLOTTER_PRESS_BOTTOM_EDGE","PLOTTER_PRESS_TOP_EDGE",
+ "PLOTTER_PRESS_CORNER"};
 
 
 
-*/
+struct fsmtable PlotterPaperTable[] = {
+
+    {PLOTTER_NO_PAPER,         PLOTTER_PRESS_NEW_PAPER,    PLOTTER_HOLDING_BELOW,     NULL},
+
+    {PLOTTER_HOLDING_BELOW,    PLOTTER_ABOVE_CARRIAGE,     PLOTTER_HOLDING_ABOVE,     NULL},
+
+    {PLOTTER_HOLDING_ABOVE,    PLOTTER_BELOW_CARRIAGE,     PLOTTER_HOLDING_BELOW,     NULL},
+    {PLOTTER_HOLDING_ABOVE,    PLOTTER_DROP_PAPER,         PLOTTER_DROPPED,           NULL},
+    
+    {PLOTTER_DROPPED,          PLOTTER_PAPER_PRESS,        PLOTTER_POSITIONING,       NULL},
+    {PLOTTER_DROPPED,          PLOTTER_PRESS_STICKY,       PLOTTER_STICKY1,           NULL},
+    
+    {PLOTTER_POSITIONING,      PLOTTER_PAPER_RELEASE,      PLOTTER_DROPPED,           NULL},
+
+    {PLOTTER_STICKY1,          PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTTOM_FIXED,      NULL},
+    {PLOTTER_STICKY1,          PLOTTER_PRESS_TOP_EDGE},    PLOTTER_TOP_FIXED,         NULL},
+
+    {PLOTTER_BOTTOM_FIXED,     PLOTTER_PRESS_STICKY,       PLOTTER_STICKY2,           NULL},
+
+    {PLOTTER_STICKY2,          PLOTTER_PRESS_TOP_EDGE,     PLOTTER_BOTH_FIXED,        NULL},
+
+    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTTOM_FREE,       NULL},
+    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_TOP_EDGE,     PLOTTER_TOP_FREE,          NULL},
+    
+    {PLOTTER_TOP_FIXED,        PLOTTER_PRESS_STICKY,       PLOTTER_STICKY3,           NULL},
+
+    {PLOTTER_STICKY3,          PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTH_FIXED,        NULL},
+
+    {PLOTTER_TOP_FREE,         PLOTTER_PRESS_BOTTOM_EDGE,  PLOTTER_BOTH_FREE,         NULL},
+
+    {PLOTTER_BOTTOM_FREE,      PLOTTER_PRESS_TOP_EDGE,     PLOTTER_BOTH_FREE,         NULL},
+
+    {PLOTTER_BOTH_FREE,        PLOTTER_PAPER_PRESS,        PLOTTER_POSITIONING2,      NULL},
+    {PLOTTER_BOTH_FREE,        PLOTTER_PRESS_CORNER,       PLOTTER_PARER_REMOVED,     NULL,
+
+    {PLOTTER_POSITIONING2,     PLOTTER_DROP_PAPER,         PLOTTER_BOTH_FREE,         NULL},
+
+    {PLOTTER_PARER_REMOVED,    PLOTTER_PRESS_NEW_PAPER,    PLOTTER_NO_PAPER,          NULL},
+
+    {-1,-1,-1,NULL}
+};
+
+    
+
+     
