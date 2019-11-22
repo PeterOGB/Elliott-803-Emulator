@@ -81,7 +81,8 @@ static struct knobInfo
                  /* Plus three paper areas */
 
 
-static int PenX,PenY;
+static int penx,peny;    // For half resolution image
+static int PenX,PenY;    // For full resolution image
 static gboolean PenDown = TRUE;
 static cairo_t *visibleSurfaceCr = NULL;
 static Rectangle PaperArea = {0,0,0,0};
@@ -142,32 +143,54 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 
 
 
-enum PlotterStates {PLOTTER_NO_PAPER,PLOTTER_HOLDING_BELOW,PLOTTER_HOLDING_ABOVE,PLOTTER_DROPPED,
-		    PLOTTER_POSITIONING,PLOTTER_STICKY1,PLOTTER_BOTTOM_FIXED,PLOTTER_STICKY2,
+enum PlotterStates {PLOTTER_NO_PAPER,PLOTTER_HOLDING_PAPER,PLOTTER_DROPPED_PAPER,
+		    PLOTTER_BOTTOM_FIXED,
 		    PLOTTER_BOTH_FIXED,PLOTTER_TOP_FIXED,PLOTTER_STICKY3,PLOTTER_TOP_FREE,
 		    PLOTTER_BOTTOM_FREE,PLOTTER_BOTH_FREE,PLOTTER_POSITIONING2,PLOTTER_PAPER_REMOVED};
 
 const char *PlotterStateNames[] =
-    {"PLOTTER_NO_PAPER","PLOTTER_HOLDING_BELOW","PLOTTER_HOLDING_ABOVE","PLOTTER_DROPPED",
-     "PLOTTER_POSITIONING","PLOTTER_STICKY1","PLOTTER_BOTTOM_FIXED","PLOTTER_STICKY2",
+    {"PLOTTER_NO_PAPER","PLOTTER_HOLDING_PAPER","PLOTTER_DROPPED_PAPER",
+     "PLOTTER_BOTTOM_FIXED",
      "PLOTTER_BOTH_FIXED","PLOTTER_TOP_FIXED","PLOTTER_STICKY3","PLOTTER_TOP_FREE",
      "PLOTTER_BOTTOM_FREE","PLOTTER_BOTH_FREE","PLOTTER_POSITIONING2","PLOTTER_PARER_REMOVED"};
 
 
-enum PlotterEvents {PLOTTER_PRESS_NEW_PAPER,PLOTTER_ABOVE_CARRIAGE,PLOTTER_BELOW_CARRIAGE,
-		    PLOTTER_DROP_PAPER,PLOTTER_PAPER_PRESS,
-		    PLOTTER_PAPER_RELEASE,PLOTTER_PRESS_STICKY,PLOTTER_PRESS_BOTTOM_EDGE,PLOTTER_PRESS_TOP_EDGE,
+enum PlotterEvents {PLOTTER_PRESS_NEW_PAPER,PLOTTER_DROP_PAPER,PLOTTER_PAPER_PRESS,
+		    PLOTTER_FIX_BOTTOM_STICKY,PLOTTER_FIX_TOP_STICKY,
+		    PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_PRESS_TOP_STICKY,
 		    PLOTTER_PRESS_CORNER};
 
 const char *PlotterEventNames[] =
-{"PLOTTER_PRESS_NEW_PAPER","PLOTTER_ABOVE_CARRIAGE","PLOTTER_BELOW_CARRIAGE",
- "PLOTTER_DROP_PAPER","PLOTTER_PAPER_PRESS",
- "PLOTTER_PAPER_RELEASE","PLOTTER_PRESS_STICKY","PLOTTER_PRESS_BOTTOM_EDGE","PLOTTER_PRESS_TOP_EDGE",
+{"PLOTTER_PRESS_NEW_PAPER", "PLOTTER_DROP_PAPER","PLOTTER_PAPER_PRESS",
+ "PLOTTER_FIX_BOTTOM_STICKY","PLOTTER_FIX_TOP_STICKY",
+ "PLOTTER_PRESS_BOTTOM_EDGE","PLOTTER_PRESS_TOP_EDGE",
  "PLOTTER_PRESS_CORNER"};
 
 
 
-struct fsmtable PlotterPaperTable[] = {
+struct fsmtable PlotterPaperTableOld[] = {
+
+    {PLOTTER_NO_PAPER,         PLOTTER_PRESS_NEW_PAPER,    PLOTTER_HOLDING_PAPER,     NULL},
+
+    {PLOTTER_HOLDING_PAPER,    PLOTTER_DROP_PAPER,         PLOTTER_DROPPED_PAPER,     NULL},
+
+    {PLOTTER_DROPPED_PAPER,    PLOTTER_PRESS_CORNER,       PLOTTER_HOLDING_PAPER,     NULL},
+    {PLOTTER_DROPPED_PAPER,    PLOTTER_FIX_BOTTOM_EDGE,    PLOTTER_BOTTOM_FIXED,      NULL},
+
+    {PLOTTER_BOTTOM_FIXED,     PLOTTER_FIX_TOP_EDGE,       PLOTTER_BOTH_FIXED,        NULL},
+
+    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_BOTTOM_FREE,       NULL},
+    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_TOP_STICKY,   PLOTTER_TOP_FREE,          NULL},
+
+    {PLOTTER_BOTTOM_FREE,      PLOTTER_PRESS_TOP_STICKY,   PLOTTER_DROPPED_PAPER,     NULL},
+    {PLOTTER_TOP_FREE,         PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_DROPPED_PAPER,     NULL},
+    
+    
+    {-1,-1,-1,NULL}
+};
+
+#if 0
+struct fsmtable PlotterPaperTableOld[] = {
 
     {PLOTTER_NO_PAPER,         PLOTTER_PRESS_NEW_PAPER,    PLOTTER_HOLDING_BELOW,     NULL},
 
@@ -208,6 +231,8 @@ struct fsmtable PlotterPaperTable[] = {
 
     {-1,-1,-1,NULL}
 };
+
+#endif
 
 struct fsm PlotterPaperFSM = { "Plotter FSM",0, PlotterPaperTable ,
 			 PlotterStateNames,PlotterEventNames,1,-1};
@@ -412,9 +437,9 @@ static struct fsmtable PlotterWindowTable[] = {
     {OUTSIDE_WINDOW,           FSM_ENTER,           INSIDE_WINDOW,            PlotterWindowEnterHandler},
     
     {INSIDE_WINDOW,            FSM_LEAVE,           OUTSIDE_WINDOW,           PlotterWinowLeaveHandler},
-    {INSIDE_WINDOW,            FSM_CONSTRAINED,     CONSTRAINED_INSIDE,       NULL},
+//    {INSIDE_WINDOW,            FSM_CONSTRAINED,     CONSTRAINED_INSIDE,       NULL},
     
-    {CONSTRAINED_INSIDE,       FSM_UNCONSTRAINED,   INSIDE_WINDOW,            PlotterWindowUnconstrainedHandler},
+//    {CONSTRAINED_INSIDE,       FSM_UNCONSTRAINED,   INSIDE_WINDOW,            PlotterWindowUnconstrainedHandler},
 
     // Leave this here incase the hand needs to be constrained 
 /*
@@ -503,8 +528,10 @@ on_PlotterDrawingArea_leave_notify_event(__attribute__((unused)) GtkWidget *draw
 #define PAPER_HIGH 400
 #define PAPER_LEFT 10
 #define PAPER_TOP 200
+#define DRAWABLE_DRUM_WIDE 552
 #define DRUM_WIDE 616
 #define DRUM_HIGH 750
+#define DRAWABLE_DRUM_LEFT 72.0
 #define DRUM_LEFT 39.0
 #define DRUM_TOP 18.0
 
@@ -552,7 +579,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 
 	// Create surface to be shown
 	visibleSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-						  DRUM_WIDE,DRUM_HIGH+LINES_VISIBLE);
+						  DRAWABLE_DRUM_WIDE,DRUM_HIGH);
 	visibleSurfaceCr = cairo_create(visibleSurface);
 
 	// Initialise it to the drum image.
@@ -564,7 +591,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 
 	// Create surface for things drawn on the drum !
 	drumSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-						  DRUM_WIDE,DRUM_HIGH+LINES_VISIBLE);
+						  DRAWABLE_DRUM_WIDE,DRUM_HIGH);
 	drumSurfaceCr = cairo_create(drumSurface);
 
 	// Initialise it to the drum image.
@@ -572,57 +599,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	cairo_paint(drumSurfaceCr);
 
 
-	// Moved to plotterInit
-#if 0	
-	if(paper_pixbuf != NULL)
-	{
-	    cairo_surface_t *paperSurface = NULL;
-	    paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-						  2*PAPER_WIDE,2*PAPER_HIGH);
 
-	    paperSurfaceCr = cairo_create(paperSurface);
-	    gdk_cairo_set_source_pixbuf (paperSurfaceCr, paper_pixbuf ,0.0,0.0);
-	
-	    cairo_paint(paperSurfaceCr);
-
-	    PaperLoaded = TRUE;
-	    PaperArea = loadedPaperSize;
-	}
-#endif	    
-
-
-#if 0
-	// Add a piece of white paper
-	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-	cairo_rectangle(visibleSurfaceCr, PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
-	cairo_stroke_preserve(visibleSurfaceCr);
-	cairo_fill(visibleSurfaceCr);
-
-	// Add duplicate at bottom of surface
-	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-	cairo_rectangle(visibleSurfaceCr, PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
-	cairo_stroke_preserve(visibleSurfaceCr);
-	cairo_fill(visibleSurfaceCr);
-#endif	
-
-
-#if 0
-	cairo_set_line_width (visibleSurfaceCr, 2);
-	cairo_set_source_rgba(visibleSurfaceCr,0.0,1.0,0.0,1.0);
-	cairo_move_to(visibleSurfaceCr,0.0,0.0);
-	cairo_line_to(visibleSurfaceCr,DRUM_WIDE,0.0);
-	cairo_stroke(visibleSurfaceCr);
-
-	cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,1.0,1.0);
-	cairo_move_to(visibleSurfaceCr,0.0,DRUM_HIGH);
-	cairo_line_to(visibleSurfaceCr,DRUM_WIDE,DRUM_HIGH);
-	cairo_stroke(visibleSurfaceCr);
-	
-	cairo_set_source_rgba(visibleSurfaceCr,1.0,0.0,0.0,1.0);
-	cairo_move_to(visibleSurfaceCr,0.0,LINES_VISIBLE);
-	cairo_line_to(visibleSurfaceCr,DRUM_WIDE,LINES_VISIBLE);
-	cairo_stroke(visibleSurfaceCr);
-#endif
     }
 
 
@@ -647,9 +624,6 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     // Draw manual button in the background surface
     {
 	int state;
-//	knob = &knobs[knobCount-1];
-//	state = (knob->state != 0) ?  1:0; 
-//	if((state == 1) && V24On) state = 2;  // Light it up 
 	state = (PlotterManual) ? 1 : 0;
 	if(PlotterManual && V24On) state = 2; // Light it up
 	gdk_cairo_set_source_pixbuf (backgroundSurfaceCr,
@@ -659,35 +633,34 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     }
 
     
-    /*
-    cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
-    cairo_set_line_width (drumSurfaceCr, 1);
-    cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
-    cairo_move_to (drumSurfaceCr, counter, 50.0); cairo_line_to (drumSurfaceCr, counter, 50.0);
-    cairo_stroke (drumSurfaceCr);
-    counter += 1;
-    */
-
     // Render the background surface
     cairo_set_source_surface (cr, backgroundSurface ,0.0,0.0);
     cairo_paint(cr);
 
     // Set top line of the image
-    topLine = (PenY/2) - MIDDLE_LINE;
+    topLine = peny - MIDDLE_LINE;
 
     // If close to the top, use the duplicate at the bottom.
-    if((PenY/2)<MIDDLE_LINE)
-    {
-        topLine = DRUM_HIGH - (MIDDLE_LINE -(PenY/2));
-    }
+    //if(topLine < 0)
+    //{
+    //    topLine += DRUM_HIGH;
+    //}
       
     // Draw the part of the drum surface visible in the window
-    cairo_set_source_surface (cr, visibleSurface ,DRUM_LEFT,-topLine+DRUM_TOP);
-    
-    cairo_rectangle(cr, DRUM_LEFT, DRUM_TOP,DRUM_WIDE, LINES_VISIBLE);
+    cairo_set_source_surface (cr, visibleSurface ,DRAWABLE_DRUM_LEFT-2,DRUM_TOP-topLine);
+    {
+	// THis makes the surface wrap so no need to keep duplicate area
+	// at the bottom anymore :-)
+	cairo_pattern_t *pattern;
+	pattern = cairo_get_source (cr);
+
+	cairo_pattern_set_extend (pattern,CAIRO_EXTEND_REPEAT);
+    }
+	
+    cairo_rectangle(cr, DRAWABLE_DRUM_LEFT,DRUM_TOP,DRAWABLE_DRUM_WIDE-2, LINES_VISIBLE);
     cairo_stroke_preserve(cr);
     cairo_fill(cr);
-
+    
 
     // Draw unattached paper on drum
     if( (PlotterPaperFSM.state == PLOTTER_POSITIONING) ||
@@ -695,9 +668,9 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	(PlotterPaperFSM.state == PLOTTER_DROPPED) ||
 	(PlotterPaperFSM.state == PLOTTER_STICKY1) ||
 	(PlotterPaperFSM.state == PLOTTER_STICKY2) ||
-	(PlotterPaperFSM.state == PLOTTER_STICKY3) ||
-	(PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED) ||
-	(PlotterPaperFSM.state == PLOTTER_TOP_FIXED)
+	(PlotterPaperFSM.state == PLOTTER_STICKY3) // ||
+	//(PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED) ||
+	//(PlotterPaperFSM.state == PLOTTER_TOP_FIXED)
 	)
     {
 	int reducedHeight;
@@ -753,7 +726,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	    grey = bar / 3.0;
 	    grey = 1.0 - grey;
 	    cairo_set_source_rgba(cr,grey,grey,grey,1.0);
-	    cairo_move_to (cr,DRUM_LEFT           +0.5,-25 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
+	    cairo_move_to (cr,DRUM_LEFT+           +0.5,-25 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
 	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,-25 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
 	    cairo_move_to (cr,DRUM_LEFT           +0.5,+26 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
 	    cairo_line_to (cr,DRUM_LEFT+DRUM_WIDE +0.5,+26 + DRUM_TOP + MIDDLE_LINE + bar + 0.5);
@@ -781,8 +754,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     
 
     // Draw the carriage
-    cairo_set_source_surface(cr,carriageSurface,DRUM_LEFT+(PenX/2), DRUM_TOP+MIDDLE_LINE-32.0);
-    cairo_rectangle(cr, DRUM_LEFT+(PenX/2),  DRUM_TOP+MIDDLE_LINE-32.0, 64.0, 64.0);
+    cairo_set_source_surface(cr,carriageSurface,DRUM_LEFT+penx, DRUM_TOP+MIDDLE_LINE-32.0);
+    cairo_rectangle(cr, DRUM_LEFT+penx,  DRUM_TOP+MIDDLE_LINE-32.0, 64.0, 64.0);
     cairo_stroke_preserve(cr);
     cairo_fill(cr);
 
@@ -995,8 +968,8 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		 (PlotterPaperFSM.state == PLOTTER_TOP_FIXED) )
 		 )
     {
-	    g_debug("PressedAtX=%f PressedAtY=%f %f\n",FingerPressedAtX,FingerPressedAtY,
-		    (FingerPressedAtY - PaperArea.y));
+	    /* g_debug("PressedAtX=%f PressedAtY=%f %f\n",FingerPressedAtX,FingerPressedAtY, */
+	    /* 	    (FingerPressedAtY - PaperArea.y)); */
 	    if( (fabs(FingerPressedAtY - PaperArea.y) < 7.0) &&
 		(FingerPressedAtX >= PaperArea.x) &&
 		(FingerPressedAtX <= PaperArea.x+PaperArea.width))
@@ -1012,8 +985,8 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    }
 
 	    
-	    g_debug("PressedAtX=%f PressedAtY=%f %f\n",FingerPressedAtX,FingerPressedAtY,
-		    (FingerPressedAtY - (PaperArea.y-PaperArea.height)));
+	    /* g_debug("PressedAtX=%f PressedAtY=%f %f\n",FingerPressedAtX,FingerPressedAtY, */
+	    /* 	    (FingerPressedAtY - (PaperArea.y-PaperArea.height))); */
 	    if( (fabs(FingerPressedAtY - (PaperArea.y-PaperArea.height) < 7.0)) &&
 		(FingerPressedAtX >= PaperArea.x) &&
 		(FingerPressedAtX <= PaperArea.x+PaperArea.width))
@@ -1031,57 +1004,77 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 
 	    // Transfer paper into the visible surface
-	    if(PlotterPaperFSM.state == PLOTTER_BOTH_FIXED)
+	    if( (PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED) ||
+		(PlotterPaperFSM.state == PLOTTER_TOP_FIXED) )
 	    {
 
 		cairo_surface_t *paperSurface = NULL;
 		int topLine;
+		gdouble top,bottom;
 		// Put paper onto the drum
 		cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
 		//cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
 
-		topLine = (PenY/2) - MIDDLE_LINE;
+		topLine = peny - MIDDLE_LINE;
 
-		g_debug("(%f,%f) (%f,%f)\n",PaperArea.x,PaperArea.y,
-				PaperArea.width,PaperArea.height);
-		g_debug("(%f,%f) (%f,%f)\n",PaperArea.x-DRUM_LEFT,PaperArea.y+topLine-DRUM_TOP,
-				PaperArea.width,-PaperArea.height);
+		/* g_debug("(%f,%f) (%f,%f)\n",PaperArea.x,PaperArea.y, */
+		/* 		PaperArea.width,PaperArea.height); */
+		/* g_debug("(%f,%f) (%f,%f)\n",PaperArea.x-DRUM_LEFT,PaperArea.y+topLine-DRUM_TOP, */
+		/* 		PaperArea.width,-PaperArea.height); */
 		// Let cairo worry about clipping !
-		cairo_rectangle(visibleSurfaceCr,PaperArea.x-DRUM_LEFT,PaperArea.y+topLine-DRUM_TOP,
+		top    = PaperArea.y+topLine-(DRUM_TOP+PaperArea.height);
+		bottom = PaperArea.y+topLine-DRUM_TOP;
+
+
+		/* g_debug("top = %f  botom = %f\n",top,bottom); */ 
+
+		
+		cairo_rectangle(visibleSurfaceCr,
+				PaperArea.x-DRAWABLE_DRUM_LEFT+2,PaperArea.y+topLine-DRUM_TOP-0.5,
 				PaperArea.width,-PaperArea.height);
 		cairo_stroke_preserve(visibleSurfaceCr);
 		cairo_fill(visibleSurfaceCr);
 
 		{
-		    Rectangle sticky = {PaperArea.x+DRUM_LEFT,PaperArea.y+topLine-DRUM_TOP,
+		    Rectangle paper = {PaperArea.x-DRAWABLE_DRUM_LEFT,PaperArea.y+topLine-DRUM_TOP,
 				PaperArea.width,PaperArea.height };
-		    PaperVisibleArea = sticky;
+
+		    modf(paper.x,&paper.x);
+		    modf(paper.y,&paper.y);
+		    modf(paper.width,&paper.width);
+		    modf(paper.height,&paper.height);
+
+		    
+		    PaperVisibleArea = paper;
 		}
 
-
-
-		
-		cairo_rectangle(visibleSurfaceCr,PaperArea.x-DRUM_LEFT,DRUM_HIGH+PaperArea.y+topLine-DRUM_TOP,
+		cairo_rectangle(visibleSurfaceCr,
+				PaperArea.x-DRAWABLE_DRUM_LEFT+2,DRUM_HIGH+PaperArea.y+topLine-DRUM_TOP-0.5,
 				PaperArea.width,-PaperArea.height);
 		cairo_stroke_preserve(visibleSurfaceCr);
 		cairo_fill(visibleSurfaceCr);
 
-		g_debug("(%f,%f) (%f,%f)\n",bottomStickyArea.x,bottomStickyArea.y,
-				bottomStickyArea.width,bottomStickyArea.height);
-		g_debug("(%f,%f) (%f,%f)\n",bottomStickyArea.x-DRUM_LEFT,bottomStickyArea.y+topLine-DRUM_TOP,
-				bottomStickyArea.width,-bottomStickyArea.height);
+
+
+
+
+		/* g_debug("(%f,%f) (%f,%f)\n",bottomStickyArea.x,bottomStickyArea.y, */
+		/* 		bottomStickyArea.width,bottomStickyArea.height); */
+		/* g_debug("(%f,%f) (%f,%f)\n",bottomStickyArea.x,bottomStickyArea.y+topLine-DRUM_TOP, */
+		/* 		bottomStickyArea.width,-bottomStickyArea.height); */
 
 
 		// Add the bottom sticky
 		cairo_set_source_rgba(visibleSurfaceCr,0.3,0.3,0.3,0.5);
-		cairo_rectangle(visibleSurfaceCr,bottomStickyArea.x-DRUM_LEFT,bottomStickyArea.y+topLine,
+		cairo_rectangle(visibleSurfaceCr,
+				bottomStickyArea.x-DRAWABLE_DRUM_LEFT+2,bottomStickyArea.y+topLine,
 				bottomStickyArea.width,-bottomStickyArea.height);
 		cairo_stroke_preserve(visibleSurfaceCr);
 		cairo_set_source_rgba(visibleSurfaceCr,0.8,0.8,0.8,0.8);
 		cairo_fill(visibleSurfaceCr);
 
 		{
-		    Rectangle sticky = {bottomStickyArea.x-DRUM_LEFT,bottomStickyArea.y+topLine,
+		    Rectangle sticky = {bottomStickyArea.x-DRAWABLE_DRUM_LEFT+2,bottomStickyArea.y+topLine,
 				       bottomStickyArea.width,bottomStickyArea.height };
 		    bottomStickyVisibleArea = sticky;
 		}
@@ -1089,7 +1082,8 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 		// lower duplicate
 		cairo_set_source_rgba(visibleSurfaceCr,0.3,0.3,0.3,0.5);
-		cairo_rectangle(visibleSurfaceCr,bottomStickyArea.x-DRUM_LEFT,DRUM_HIGH+bottomStickyArea.y+topLine,
+		cairo_rectangle(visibleSurfaceCr,
+				bottomStickyArea.x-DRAWABLE_DRUM_LEFT+2,DRUM_HIGH+bottomStickyArea.y+topLine,
 				bottomStickyArea.width,-bottomStickyArea.height);
 		cairo_stroke_preserve(visibleSurfaceCr);
 		cairo_set_source_rgba(visibleSurfaceCr,0.8,0.8,0.8,0.8);
@@ -1099,14 +1093,15 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		
 		// Add the top sticky
 		cairo_set_source_rgba(visibleSurfaceCr,0.3,0.3,0.3,0.5);
-		cairo_rectangle(visibleSurfaceCr,topStickyArea.x-DRUM_LEFT,topStickyArea.y+topLine,
+		cairo_rectangle(visibleSurfaceCr,
+				topStickyArea.x-DRAWABLE_DRUM_LEFT+2,topStickyArea.y+topLine,
 				topStickyArea.width,-topStickyArea.height);
 		cairo_stroke_preserve(visibleSurfaceCr);
 		cairo_set_source_rgba(visibleSurfaceCr,0.8,0.8,0.8,0.8);
 		cairo_fill(visibleSurfaceCr);
 
 		{
-		    Rectangle sticky = {topStickyArea.x-DRUM_LEFT,topLine+topStickyArea.y,
+		    Rectangle sticky = {topStickyArea.x-DRAWABLE_DRUM_LEFT+2,topLine+topStickyArea.y,
 					topStickyArea.width,topStickyArea.height};
 		    topStickyVisibleArea = sticky;
 		}
@@ -1115,7 +1110,8 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 		// lower duplicate
 		cairo_set_source_rgba(visibleSurfaceCr,0.3,0.3,0.3,0.5);
-		cairo_rectangle(visibleSurfaceCr,topStickyArea.x-DRUM_LEFT,DRUM_HIGH+topStickyArea.y+topLine,
+		cairo_rectangle(visibleSurfaceCr,
+				topStickyArea.x-DRAWABLE_DRUM_LEFT+2,DRUM_HIGH+topStickyArea.y+topLine,
 				topStickyArea.width,-topStickyArea.height);
 		cairo_stroke_preserve(visibleSurfaceCr);
 		cairo_set_source_rgba(visibleSurfaceCr,0.8,0.8,0.8,0.8);
@@ -1128,8 +1124,8 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 		// Create full resolution surface for the paper
 		paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-							  2*PAPER_WIDE,2*PAPER_HIGH);
-
+							  2*PaperArea.width,2*PaperArea.height);
+		g_debug("paperSurface = %p (%f,%f)\n",paperSurface,2*PaperArea.width,2*PaperArea.height);
 		paperSurfaceCr = cairo_create(paperSurface);
 		// Clear to white
 		cairo_set_source_rgba(paperSurfaceCr,1.0,1.0,1.0,1.0);
@@ -1170,10 +1166,10 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	(PlotterPaperFSM.state == PLOTTER_DROPPED) )
     {
 
-	g_debug("PressedAt (%f,%f)  Paper (%f,%f) to (%f,%f)\n",
-		FingerPressedAtX,FingerPressedAtY,
-		PaperArea.x,PaperArea.y,
-		PaperArea.x+PaperArea.width,PaperArea.y+PaperArea.height);
+	/* g_debug("PressedAt (%f,%f)  Paper (%f,%f) to (%f,%f)\n", */
+	/* 	FingerPressedAtX,FingerPressedAtY, */
+	/* 	PaperArea.x,PaperArea.y, */
+	/* 	PaperArea.x+PaperArea.width,PaperArea.y+PaperArea.height); */
 
 	if((FingerPressedAtX >= PaperArea.x) && (FingerPressedAtX <= PaperArea.x+PaperArea.width) &&
 	   (FingerPressedAtY <= PaperArea.y) && (FingerPressedAtY >= PaperArea.y-PaperArea.height))
@@ -1181,7 +1177,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    trackingHand->showingHand = HAND_ALL_FINGERS;
 	    doFSM(&PlotterPaperFSM,PLOTTER_PAPER_PRESS,NULL);
 	
-	    g_debug("PRESS %d \n",trackingHand->showingHand);
+	    //g_debug("PRESS %d \n",trackingHand->showingHand);
 	    //PaperMoving = TRUE;
 	}
     }
@@ -1280,7 +1276,7 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	PaperMovedByX = 0.0;
 	PaperArea.y += PaperMovedByY;
 	PaperMovedByY = 0.0;
-	g_debug("Paper Top Corner Dropped at (%f,%f)\n",PaperArea.x,PaperArea.y);
+	//g_debug("Paper Top Corner Dropped at (%f,%f)\n",PaperArea.x,PaperArea.y);
 	doFSM(&PlotterPaperFSM,PLOTTER_PAPER_RELEASE,NULL);
 	trackingHand->showingHand = HAND_EMPTY;
     }
@@ -1397,7 +1393,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     if( (PlotterPaperFSM.state == PLOTTER_POSITIONING) ||
 	(PlotterPaperFSM.state == PLOTTER_POSITIONING2))
     {
-	g_debug("MOved (%f,%f)\n",hx-FingerPressedAtX,hy-FingerPressedAtY);
+	//g_debug("MOved (%f,%f)\n",hx-FingerPressedAtX,hy-FingerPressedAtY);
 	PaperMovedByX = hx-FingerPressedAtX;
 	PaperMovedByY = hy-FingerPressedAtY;
     }
@@ -1409,7 +1405,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	(PlotterPaperFSM.state == PLOTTER_HOLDING_ABOVE) )
     {
 
-	g_debug("hy = %f\n",hy);
+	//g_debug("hy = %f\n",hy);
 	
 	if( (PlotterPaperFSM.state == PLOTTER_HOLDING_BELOW) && (hy < 150.0))
 	{
@@ -1495,7 +1491,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	
 	if(LeftHandInfo.showingHand != showing)
 	{
-	    g_debug("Left hand changed\n");
+	    //g_debug("Left hand changed\n");
 	    ConfigureLeftHandNew (0.0,0.0,0,showing);
 	}
     }
@@ -1552,14 +1548,17 @@ static void wrapY(void)
     if(PenY <0)
     {
 	PenY += (2*DRUM_HIGH);
+	peny = PenY / 2;
 	g_info("Wrap 1 %d\n",PenY);
-    }
-
-    if(PenY > (2*DRUM_HIGH))
+    }else if(PenY > (2*DRUM_HIGH))
     {
 	PenY -= (2*DRUM_HIGH);
+	peny = PenY / 2;
 	g_info("Wrap 2 %d\n",PenY);
     }
+    else
+	peny = PenY / 2;
+    
 }
 
 static void limitX(void)
@@ -1567,44 +1566,48 @@ static void limitX(void)
 	if(PenX > 1100)
 	{
 	    PenX = 1100;
+	    penx = 550;
 	} else 	if(PenX < 0)
 	{
 	    PenX = 0;
+	    penx = 0;
 	}
+	else
+	    penx = PenX / 2;
 }
 
 static void plotPoint(void)
 {
-    gdouble halfX,halfY,halfXPlus;
+    //gdouble halfX,halfY,halfXPlus;
     gboolean draw = TRUE;
     gboolean overPaper = FALSE;
-    halfX = PenX/2;
-    halfXPlus = halfX + 32.5;
-    halfY = PenY/2;
+    //halfX = PenX/2;
+    //halfXPlus = halfX + 32.5;
+    //halfY = PenY/2;
 
     
-
+#if 1
 
     /* g_debug("(%f,%f) (%f,%f) (%f,%f)\n",halfXPlus,halfY, */
     /* 	    topStickyVisibleArea.x,topStickyVisibleArea.y, */
     /* 	    topStickyVisibleArea.x+topStickyVisibleArea.width, */
     /* 	    topStickyVisibleArea.y-topStickyVisibleArea.height); */
-    if( (halfXPlus >= topStickyVisibleArea.x) &&
-	(halfXPlus <= (topStickyVisibleArea.x+topStickyVisibleArea.width)) &&
-	(halfY     <= topStickyVisibleArea.y) &&
-	(halfY     >= (topStickyVisibleArea.y-topStickyVisibleArea.height)) )
+    if( (penx >= topStickyVisibleArea.x) &&
+	(penx <= (topStickyVisibleArea.x+topStickyVisibleArea.width)) &&
+	(peny <= topStickyVisibleArea.y) &&
+	(peny >= (topStickyVisibleArea.y-topStickyVisibleArea.height)) )
     {
-	g_debug("ON TOP STICKY\n");
+	//g_debug("ON TOP STICKY\n");
 	draw = FALSE;
     }
 
     if(
-	(halfXPlus >= topStickyVisibleArea.x) &&
-	(halfXPlus <= (topStickyVisibleArea.x+topStickyVisibleArea.width)) &&
-	(halfY     <= 750.0+topStickyVisibleArea.y) &&
-	(halfY     >= 750.0+(topStickyVisibleArea.y-topStickyVisibleArea.height)) )
+	(penx >= topStickyVisibleArea.x) &&
+	(penx <= (topStickyVisibleArea.x+topStickyVisibleArea.width)) &&
+	(peny <= 750.0+topStickyVisibleArea.y) &&
+	(peny >= 750.0+(topStickyVisibleArea.y-topStickyVisibleArea.height)) )
     {
-	g_debug("ON TOP STICKY IN DUPE\n");
+	//g_debug("ON TOP STICKY IN DUPE\n");
 	draw = FALSE;
     }
 
@@ -1613,66 +1616,64 @@ static void plotPoint(void)
    /* 	    bottomStickyVisibleArea.x,bottomStickyVisibleArea.y, */
    /* 	    bottomStickyVisibleArea.x+bottomStickyVisibleArea.width, */
    /* 	    bottomStickyVisibleArea.y-bottomStickyVisibleArea.height); */
-    if( (halfXPlus >= bottomStickyVisibleArea.x) &&
-	(halfXPlus <= (bottomStickyVisibleArea.x+bottomStickyVisibleArea.width)) &&
-	(halfY     <= bottomStickyVisibleArea.y) &&
-	(halfY     >= (bottomStickyVisibleArea.y-bottomStickyVisibleArea.height)) )
+    if( (penx >= bottomStickyVisibleArea.x) &&
+	(penx <= (bottomStickyVisibleArea.x+bottomStickyVisibleArea.width)) &&
+	(peny <= bottomStickyVisibleArea.y) &&
+	(peny >= (bottomStickyVisibleArea.y-bottomStickyVisibleArea.height)) )
     {
-	g_debug("ON BOTTOM STICKY\n");
+	//g_debug("ON BOTTOM STICKY\n");
 	draw = FALSE;
     }
 
     if(
-	(halfXPlus >= bottomStickyVisibleArea.x) &&
-	(halfXPlus <= (bottomStickyVisibleArea.x+bottomStickyVisibleArea.width)) &&
-	(halfY     <= 750.0+bottomStickyVisibleArea.y) &&
-	(halfY     >= 750.0+(bottomStickyVisibleArea.y-bottomStickyVisibleArea.height)) )
+	(penx >= bottomStickyVisibleArea.x) &&
+	(penx <= (bottomStickyVisibleArea.x+bottomStickyVisibleArea.width)) &&
+	(peny <= 750.0+bottomStickyVisibleArea.y) &&
+	(peny >= 750.0+(bottomStickyVisibleArea.y-bottomStickyVisibleArea.height)) )
     {
-	g_debug("ON BOTTOM STICKY IN DUPE\n");
+	//g_debug("ON BOTTOM STICKY IN DUPE\n");
 	draw = FALSE;
     }
     
-
+#endif
 
     if(draw)
     {
 	cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,1.0);
 	cairo_set_line_width (visibleSurfaceCr, 1);
 	cairo_set_line_cap  (visibleSurfaceCr, CAIRO_LINE_CAP_ROUND);
-	cairo_move_to (visibleSurfaceCr, halfXPlus,0.5+(halfY));
-	cairo_line_to (visibleSurfaceCr, halfXPlus,0.5+(halfY));
+	cairo_move_to (visibleSurfaceCr,penx+0.5,peny+0.5);
+	cairo_line_to (visibleSurfaceCr,penx+0.5,peny+0.5);
 	cairo_stroke (visibleSurfaceCr);
 
 	// Duplicate at bottom
-	if((halfY)<=LINES_VISIBLE)
-	{
-	    cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,1.0);
-	    cairo_move_to (visibleSurfaceCr, halfXPlus,0.5+(halfY)+DRUM_HIGH);
-	    cairo_line_to (visibleSurfaceCr, halfXPlus,0.5+(halfY)+DRUM_HIGH);
-	    cairo_stroke (visibleSurfaceCr);
-	}
+	//if(peny<=LINES_VISIBLE)
+	//{
+	//    cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,1.0);
+	//    cairo_move_to (visibleSurfaceCr,0.5+penx,0.5+peny+DRUM_HIGH);
+	//    cairo_line_to (visibleSurfaceCr,0.5+penx,0.5+peny+DRUM_HIGH);
+	//    cairo_stroke (visibleSurfaceCr);
+	//}
   
-       g_debug("(%f,%f) (%f,%f) (%f,%f)\n",halfX,halfY,
-   	    PaperArea.x,PaperArea.y,
-   	    PaperArea.x+PaperArea.width,
-   	    PaperArea.y-PaperArea.height);
+      
 
 //    if((halfX >= PaperArea.x) && (halfX <= (PaperArea.x+PaperArea.width)) &&
 //       (halfY >= PaperArea.y) && (halfY <= (PaperArea.y+PaperArea.height)))
-       if( ( (halfX >= PaperVisibleArea.x) &&
-	     (halfX <= (PaperVisibleArea.x+PaperVisibleArea.width)) &&
-	     (halfY     <= PaperVisibleArea.y) &&
-	     (halfY     >= (PaperVisibleArea.y-PaperVisibleArea.height)) ) ||
-	   ( (halfX >= PaperVisibleArea.x) &&
-	     (halfX <= (PaperVisibleArea.x+PaperVisibleArea.width)) &&
-	     (halfY     <= 750.0+PaperVisibleArea.y) &&
-	     (halfY     >= 750.0+(PaperVisibleArea.y-PaperVisibleArea.height)))
+       if( ( (penx >= PaperVisibleArea.x) &&
+	     (penx <= (PaperVisibleArea.x+PaperVisibleArea.width)) &&
+	     (peny     <= PaperVisibleArea.y) &&
+	     (peny     >= (PaperVisibleArea.y-PaperVisibleArea.height)) ) ||
+	   ( (penx >= PaperVisibleArea.x) &&
+	     (penx <= (PaperVisibleArea.x+PaperVisibleArea.width)) &&
+	     (peny     <= 750.0+PaperVisibleArea.y) &&
+	     (peny     >= 750.0+(PaperVisibleArea.y-PaperVisibleArea.height)))
 	   )
        {
 	   overPaper = TRUE;
        }
-	
 
+
+       
        if(overPaper)
        {
 	
@@ -1680,11 +1681,34 @@ static void plotPoint(void)
 	// Draw full resolution version if paper loaded
 	   if(paperSurfaceCr != NULL)
 	   {
+	       gdouble x,y,top;
+
+	       x =  0.5+PenX-(2*PaperVisibleArea.x);
+	       y =  0.5+PenY-(2*(PaperVisibleArea.y-PaperVisibleArea.height));
+
+//	       if(y > (-2.0 * PaperVisibleArea.height))
+//		   y -= 400.0;
+
+	       //if(y > 400.0) y -= 400.0;
+
+//	   y -= (2.0 * PaperVisibleArea.height);
+	       if(y > 1500.0) y -= 1500.0;
+
+	       //top = 2*(PaperVisibleArea.y-PaperVisibleArea.height);
+
+	       g_debug("(%d,%d) (%f,%f) (%f,%f) [%f,%f] %s\n",PenX,PenY,
+		       2*PaperVisibleArea.x,2*PaperVisibleArea.y,
+		       2*(PaperVisibleArea.x+PaperVisibleArea.width),
+		       2*(PaperVisibleArea.y-PaperVisibleArea.height),
+		       x,y,
+		       overPaper ? "TRUE":"FALSE");
+
+	       
 	       cairo_set_source_rgba(paperSurfaceCr,0.0,0.0,0.0,1.0);
 	       cairo_set_line_width (paperSurfaceCr, 1);
 	       cairo_set_line_cap  (paperSurfaceCr, CAIRO_LINE_CAP_ROUND);
-	       cairo_move_to (paperSurfaceCr, 0.5+PenX-(2*PaperArea.x),0.5+PenY-(2*PaperArea.y));
-	       cairo_line_to (paperSurfaceCr, 0.5+PenX-(2*PaperArea.x),0.5+PenY-(2*PaperArea.y));
+	       cairo_move_to (paperSurfaceCr,x,y);
+	       cairo_line_to (paperSurfaceCr,x,y);
 	       cairo_stroke (paperSurfaceCr);
 	   }
        }
@@ -1693,22 +1717,23 @@ static void plotPoint(void)
 	   cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
 	   cairo_set_line_width (drumSurfaceCr, 1);
 	   cairo_set_line_cap  (drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
-	   cairo_move_to (drumSurfaceCr, halfXPlus,0.5+(halfY));
-	   cairo_line_to (drumSurfaceCr, halfXPlus,0.5+(halfY));
+	   cairo_move_to (drumSurfaceCr,0.5+penx,0.5+peny);
+	   cairo_line_to (drumSurfaceCr,0.5+penx,0.5+peny);
 	   cairo_stroke (drumSurfaceCr);
 	   
 	   // Duplicate at bottom
-	   if((halfY)<=LINES_VISIBLE)
-	   {
-	       cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
-	       cairo_move_to (drumSurfaceCr, halfXPlus,0.5+(halfY)+DRUM_HIGH);
-	       cairo_line_to (drumSurfaceCr, halfXPlus,0.5+(halfY)+DRUM_HIGH);
-	       cairo_stroke (drumSurfaceCr);
-	   }
+	   //if((peny)<=LINES_VISIBLE)
+	   //{
+	   //    cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
+	   //    cairo_move_to (drumSurfaceCr,0.5+penx,0.5+(peny)+DRUM_HIGH);
+	   //    cairo_line_to (drumSurfaceCr,0.5+penx,0.5+(peny)+DRUM_HIGH);
+	   //    cairo_stroke (drumSurfaceCr);
+	   //}
 	   
 	   //printf("OFF Paper\n");
        }
     }
+   
 }
 
 static void ACTchanged(unsigned int value)
@@ -1768,6 +1793,8 @@ static void ACTchanged(unsigned int value)
 	}
 
     }
+    
+    
 }
 
 
@@ -1781,12 +1808,14 @@ static void fastMovePen( __attribute__((unused)) unsigned int value)
 	{
 	    PenY +=  drumFastMove;
 	    wrapY();
+	    
 	}
 
 	if(carriageFastMove != 0)
 	{
 	    PenX +=  carriageFastMove;
 	    limitX();
+	    
 	}
 
 	if((drumFastMove != 0) || (carriageFastMove != 0))
@@ -1808,7 +1837,7 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 {
     
     static cairo_surface_t *paperSurface = NULL;
-    static Rectangle Paper = {150,50,200,200};
+    static Rectangle Paper = {150,50,400,600};
     HandInfo *trackingHand;
 
     g_info("squarePaperHandler\n");
@@ -1829,33 +1858,35 @@ static void squarePaperHandler(__attribute__((unused)) int state)
     }
     
 #if 0
-    if(PaperLoaded == FALSE)
+    //if(PaperLoaded == FALSE)
     {
 	// Put paper onto the drum
-	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-	cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
-	cairo_stroke_preserve(visibleSurfaceCr);
-	cairo_fill(visibleSurfaceCr);
+	//cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	//cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP,PAPER_WIDE,PAPER_HIGH);
+	//cairo_stroke_preserve(visibleSurfaceCr);
+	//cairo_fill(visibleSurfaceCr);
 
 	// Add duplicate at bottom of surface
-	cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-	cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
-	cairo_stroke_preserve(visibleSurfaceCr);
-	cairo_fill(visibleSurfaceCr);
+	//cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
+	//cairo_rectangle(visibleSurfaceCr, 32+PAPER_LEFT,PAPER_TOP+DRUM_HIGH,PAPER_WIDE,PAPER_HIGH);
+	//cairo_stroke_preserve(visibleSurfaceCr);
+	//cairo_fill(visibleSurfaceCr);
 
 
 	// Create full resolution surface for the paper
 	paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-						  2*PAPER_WIDE,2*PAPER_HIGH);
+						  2*Paper.width,2*Paper.height);
 
 	paperSurfaceCr = cairo_create(paperSurface);
 	// Clear to white
 	cairo_set_source_rgba(paperSurfaceCr,1.0,1.0,1.0,1.0);
 	cairo_paint(paperSurfaceCr);
 	
-	PaperLoaded = TRUE;
-	PaperArea = squarePaperSize;
+//	PaperLoaded = TRUE;
+//	PaperArea = squarePaperSize;
     }
+
+
     else
     {
 	// Take paper off the drum
@@ -1914,6 +1945,7 @@ static void carriageSingleKnobHandler(int state)
     {
 	PenX += state -1;
 	limitX();
+	
 	if(PenDown)
 	{
 	    plotPoint();
@@ -1931,6 +1963,7 @@ static void drumSingleKnobHandler(int state)
     { 
 	PenY += state -1;
 	wrapY();
+	peny = PenY / 2;
 	if(PenDown)
 	{
 	    plotPoint();
@@ -1983,10 +2016,12 @@ void PlotterTidy(GString *userPath)
     {
 	// Eventually will need to save the paper position and size in a config file.
 	g_string_printf(drumFileName,"%s%s",userPath->str,"Paper.png");
-
+	g_debug("Writing paper image to %s\n",drumFileName->str);
 
 	cairo_surface_write_to_png (cairo_get_target(paperSurfaceCr),drumFileName->str);
     }
+    else
+	g_debug("Paper image NOT SAVED\n");
    
 
  
@@ -2364,9 +2399,10 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
    
     
 
-    PenX = 100;
-    PenY = (PAPER_TOP+PAPER_HIGH);    // 1660 puts pen at 830
-    PenY = 0;
+    PenX = 0;
+    penx = 0;
+    //PenY = (PAPER_TOP+PAPER_HIGH);    // 1660 puts pen at 830
+    peny = PenY = 0;
     PenDown = TRUE;
 
 
