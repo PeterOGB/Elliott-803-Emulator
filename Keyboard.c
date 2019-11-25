@@ -927,7 +927,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	    if(!overVolumeControl && !wasOverVolumeControl)
 	    {
 		movingHand->handConstrained = HAND_CONSTRAINED_BY_PRESS;
-		//printf("*************** CONSTRAINED *********************\n");
+		printf("*************** CONSTRAINED 1 %d *********************\n",movingHand->FingersPressed);
 		doFSM(&KeyboardWindowFSM,FSM_CONSTRAINED,NULL); //(void *)&we);
 	    }
 	    else
@@ -935,7 +935,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 		if(!overVolumeControl && wasOverVolumeControl)
 		{
 		    movingHand->handConstrained = HAND_CONSTRAINED_BY_VOLUME;
-		    //printf("*************** CONSTRAINED BY VOLUME CONTROL *********************\n");
+		    printf("*************** CONSTRAINED BY VOLUME CONTROL 1 *********************\n");
 		    doFSM(&KeyboardWindowFSM,FSM_CONSTRAINED,NULL); //(void *)&we);
 		    showing = HAND_ONE_FINGER;
 		}
@@ -952,7 +952,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 			if(deltaVolume != 0)
 			{
 			movingHand->handConstrained = HAND_CONSTRAINED_BY_VOLUME;
-			//printf("*************** CONSTRAINED BY VOLUME CONTROL *********************\n");
+			printf("*************** CONSTRAINED BY VOLUME CONTROL 2 *********************\n");
 			doFSM(&KeyboardWindowFSM,FSM_CONSTRAINED,NULL); //(void *)&we);
 			showing = HAND_ONE_FINGER;
 			}

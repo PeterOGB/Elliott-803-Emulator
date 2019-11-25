@@ -280,7 +280,7 @@ on_ContactorDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *dr
 	
 	angle = -atan2(x,y) - G_PI/2.0;
 	//printf("diff = %f \n",angle-ContactorAngle);
-	if(fabs(angle-ContactorAngle) < 0.3)
+	if(fabs(angle-ContactorAngle) < 0.5)
 	{
 	    HoldingContactor = TRUE;
 	    ContactorOffsetAngle = angle-ContactorAngle;
