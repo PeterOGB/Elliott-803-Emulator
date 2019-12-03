@@ -1037,9 +1037,10 @@ HandInfo *updateHands(gdouble mx,gdouble my, gdouble *hx,gdouble *hy)
 	    LeftHandInfo.TargetX = mx;
 	    LeftHandInfo.TargetY = my;
 	}
-	if(hx) *hx = LeftHandInfo.FingerAtX;
-	if(hy) *hy = LeftHandInfo.FingerAtY;
-	
+	//if(hx) *hx = LeftHandInfo.FingerAtX;
+	//if(hy) *hy = LeftHandInfo.FingerAtY;
+	if(hx) modf(LeftHandInfo.FingerAtX,hx);
+	if(hy) modf(LeftHandInfo.FingerAtY,hy);
 	tracking = &LeftHandInfo;
     }
 
@@ -1050,9 +1051,11 @@ HandInfo *updateHands(gdouble mx,gdouble my, gdouble *hx,gdouble *hy)
 	    RightHandInfo.TargetX = mx;
 	    RightHandInfo.TargetY = my;
 	}
-	if(hx) *hx = RightHandInfo.FingerAtX;
-	if(hy) *hy = RightHandInfo.FingerAtY;
-
+	//if(hx) *hx = RightHandInfo.FingerAtX;
+	//if(hy) *hy = RightHandInfo.FingerAtY;
+	if(hx) modf(RightHandInfo.FingerAtX,hx);
+	if(hy) modf(RightHandInfo.FingerAtY,hy);
+	
 	tracking = &RightHandInfo;
     }
 
