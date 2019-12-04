@@ -17,6 +17,13 @@ typedef struct _myRectangle {
     gdouble topLine;
 } Rectangle;
 
+
+typedef struct _visibleArea {
+    gdouble left,top,right,bottom;
+    gboolean wrapped;
+} VisibleArea;
+
+
 extern int CPU_word_time_count;
 
 static GtkWidget *PlotterWindow = NULL;
@@ -60,12 +67,12 @@ static Rectangle OneFingerAreas[20];
 HandInfo *handHoldingPaper = NULL;
 
 static gboolean topSticky = FALSE;
-static Rectangle topStickyArea = {0.0,0.0,0.0,0.0};
-static Rectangle topStickyVisibleArea = {0.0,0.0,0.0,0.0};
+static Rectangle topStickyArea = {0.0,0.0,0.0,0.0,0.0};
+static VisibleArea topStickyVisibleArea = {0.0,0.0,0.0,0.0,0.0};
 
 static gboolean bottomSticky = FALSE;
-static Rectangle bottomStickyArea = {0.0,0.0,0.0,0.0}; 
-static Rectangle bottomStickyVisibleArea = {0.0,0.0,0.0,0.0};
+static Rectangle bottomStickyArea = {0.0,0.0,0.0,0.0,0.0}; 
+static VisibleArea bottomStickyVisibleArea = {0.0,0.0,0.0,0.0,0.0};
 
 static gdouble WrappedPaper = 0.0;
 static gdouble wrappedPaper = 0.0;
@@ -93,8 +100,8 @@ static gdouble penx,peny;    // For half resolution image
 static gdouble PenX,PenY;    // For full resolution image
 static gboolean PenDown = TRUE;
 static cairo_t *visibleSurfaceCr = NULL;
-static Rectangle PaperArea = {0,0,0,0};
-static Rectangle PaperVisibleArea = {0.0,0.0,0.0,0.0};
+static Rectangle PaperArea = {0.0,0.0,0.0,0.0,0.0};
+static Rectangle PaperVisibleArea = {0.0,0.0,0.0,0.0,0.0};
 static gboolean PaperLoaded = FALSE;
 //static gboolean PaperPositioning = FALSE;
 //static gboolean PaperMoving = FALSE;
@@ -1198,7 +1205,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 	    topLine = peny - MIDDLE_LINE;
 	    if(topLine < 0) topLine = DRUM_HIGH + topLine;
-#if 1
+
 	    gdk_cairo_set_source_pixbuf(visibleSurfaceCr,paperSmall_pixbuf,
 					PaperArea.x-DRAWABLE_DRUM_LEFT-1.0,
 					topLine-unwrappedPaper+attachingLine-DRUM_TOP);
@@ -1211,7 +1218,8 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 			    PaperArea.height);
 	
 	    cairo_fill(visibleSurfaceCr);
-	    
+
+#if 0
 	    // Check if the bottom few lines of the paper spans the top/bottom boundary
 	    // and draw duplicate to give part at the top of the visibleSurface
 		
@@ -1230,7 +1238,44 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		cairo_fill(visibleSurfaceCr);	    
 	    }
 #endif
+	     // Add the top sticky
+	    topSticky = TRUE;
+	    topStickyArea.x = FingerPressedAtX-28;
+	    topStickyArea.y = FingerPressedAtY-(STICKY_HIGH/2.0);
+	    topStickyArea.width = 50;
+	    topStickyArea.height = STICKY_HIGH;
+	    topStickyArea.topLine = topLine;
 
+	    {
+		gdouble top,bottom;
+		gboolean wrapped = FALSE;
+		
+		bottom = topStickyArea.y+topLine-1.0;
+		while(bottom >= 940.0) bottom -= 940.0;
+		top = bottom - topStickyArea.height;
+
+		while(top < 0.0) top += 940.0;
+		
+
+		if(top > bottom)
+		{
+		    gdouble t;
+		    t = top;
+		    top = bottom;
+		    bottom = t;
+		    wrapped = TRUE;
+		}
+		    
+
+		
+		VisibleArea sticky = {topStickyArea.x-DRAWABLE_DRUM_LEFT,
+				    top,
+				    topStickyArea.x-DRAWABLE_DRUM_LEFT+topStickyArea.width,
+				    bottom,
+				    wrapped};
+		topStickyVisibleArea = sticky;
+	    }
+	    
 	    // Add the top sticky into the visibleSurface
 	    cairo_set_operator (visibleSurfaceCr,CAIRO_OPERATOR_OVER);
 	    showArea2(visibleSurfaceCr,sticky_pixbuf,
@@ -1242,7 +1287,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    showArea2(visibleSurfaceCr,sticky_pixbuf,
 		      bottomStickyArea.x,bottomStickyArea.y,
 		      DRAWABLE_DRUM_LEFT, DRUM_TOP,
-		      bottomStickyArea.height);
+		      bottomStickyArea.topLine);
 
 	    
 	    
@@ -1332,42 +1377,13 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 
 
-#if 0
-	    // THis version worked
-	    // Draw the bottom few lines of the paper into the visibleSurface.
-    
-	    if(PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED)
-	    {
-		cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-		cairo_rectangle(visibleSurfaceCr,
-				PaperArea.x-DRAWABLE_DRUM_LEFT-1.0,
-				PaperArea.y + topLine - DRUM_TOP+0.0,
-				PaperArea.width+1.0,
-				-INITIAL_WRAPPED);
-		//cairo_stroke_preserve(visibleSurfaceCr);
-		cairo_fill(visibleSurfaceCr);
-
-		// Check if the bottom few lines of the paper spans the top/bottom boundary
-		// and draw duplicate to give part at the top of the visibleSurface
-		if( (PaperArea.y + topLine - DRUM_TOP) > DRUM_HIGH)
-		{
-		    cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-		    cairo_rectangle(visibleSurfaceCr,
-				    PaperArea.x-DRAWABLE_DRUM_LEFT-1.0,
-				    PaperArea.y + topLine - DRUM_TOP - DRUM_HIGH+0.0,
-				    PaperArea.width+1.0,
-				    -INITIAL_WRAPPED); 
-		    //cairo_stroke_preserve(visibleSurfaceCr);
-		    cairo_fill(visibleSurfaceCr);	    
-		}
-	    }
-#endif
 	     // Add the bottom sticky
 	    bottomSticky = TRUE;
 	    bottomStickyArea.x = FingerPressedAtX-28;
 	    bottomStickyArea.y = FingerPressedAtY-(STICKY_HIGH/2.0);
 	    bottomStickyArea.width = 50;
-	    bottomStickyArea.height = topLine; //STICKY_HIGH;
+	    bottomStickyArea.height = STICKY_HIGH;
+	    bottomStickyArea.topLine = topLine;
 	    cairo_set_operator (visibleSurfaceCr,CAIRO_OPERATOR_OVER);
 
 	    g_debug("peny=%f FingerPressedAtY=%f\n",peny,FingerPressedAtY);
@@ -1378,34 +1394,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		      topLine);
 	   
 		
-#if 0	    
-	   
-	    cairo_rectangle(visibleSurfaceCr,
-			    bottomStickyArea.x-DRAWABLE_DRUM_LEFT,
-			    bottomStickyArea.y + topLine - DRUM_TOP,
-			    bottomStickyArea.width,
-			    bottomStickyArea.height);
-	    cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,0.5);
-	    cairo_stroke_preserve(visibleSurfaceCr);
-	    cairo_set_source_rgba(visibleSurfaceCr,0.3,0.3,0.3,0.5);
-	    cairo_fill(visibleSurfaceCr);
-	    
-	    // Check if the sticky spans the top/bottom boundary and draw duplicate
-	    // to give part at the top of the visibleSurface
-	    if( (bottomStickyArea.y + topLine + bottomStickyArea.height - DRUM_TOP) > DRUM_HIGH)
-	    {
-		cairo_rectangle(visibleSurfaceCr,
-				bottomStickyArea.x-DRAWABLE_DRUM_LEFT,
-				bottomStickyArea.y + topLine - DRUM_TOP - DRUM_HIGH,
-				bottomStickyArea.width,
-				bottomStickyArea.height);
-		cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,0.5);
-		cairo_stroke_preserve(visibleSurfaceCr);
-		cairo_set_source_rgba(visibleSurfaceCr,0.3,0.3,0.3,0.5);
-		cairo_fill(visibleSurfaceCr);
 
-	    }
-#endif
 	    cairo_set_operator (visibleSurfaceCr,CAIRO_OPERATOR_SOURCE);
 
 	    
@@ -1423,8 +1412,32 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 */
 	  
 	    {
-		Rectangle sticky = {bottomStickyArea.x-DRAWABLE_DRUM_LEFT+2,bottomStickyArea.y+topLine,
-				    bottomStickyArea.width,STICKY_HIGH };
+		gdouble top,bottom;
+		gboolean wrapped = FALSE;
+		
+		bottom = bottomStickyArea.y+topLine-1.0;
+		while(bottom >= 940.0) bottom -= 940.0;
+		top = bottom - bottomStickyArea.height;
+
+		while(top < 0.0) top += 940.0;
+		
+
+		if(top > bottom)
+		{
+		    gdouble t;
+		    t = top;
+		    top = bottom;
+		    bottom = t;
+		    wrapped = TRUE;
+		}
+		    
+
+		
+		VisibleArea sticky = {bottomStickyArea.x-DRAWABLE_DRUM_LEFT,
+				    top,
+				    bottomStickyArea.x-DRAWABLE_DRUM_LEFT+bottomStickyArea.width,
+				    bottom,
+				    wrapped};
 		bottomStickyVisibleArea = sticky;
 	    }
 
@@ -1737,19 +1750,38 @@ static void plotPoint(void)
     }
 #endif
 
-    g_debug("(%f,%f) (%f,%f) (%f,%f)\n",penx,peny,
-   	    bottomStickyVisibleArea.x,bottomStickyVisibleArea.y,
-   	    bottomStickyVisibleArea.x+bottomStickyVisibleArea.width,
-   	    bottomStickyVisibleArea.y-bottomStickyVisibleArea.height);
-    if( (penx >= bottomStickyVisibleArea.x) &&
-	(penx <= (bottomStickyVisibleArea.x+bottomStickyVisibleArea.width)) &&
-	(peny <= bottomStickyVisibleArea.y) &&
-	(peny >= (bottomStickyVisibleArea.y-bottomStickyVisibleArea.height)) )
+
+    g_debug("(%f,%f) (%f,%f) (%f,%f) %s\n",penx,peny,
+   	    topStickyVisibleArea.left,topStickyVisibleArea.top,
+   	    topStickyVisibleArea.right,topStickyVisibleArea.bottom,
+	    topStickyVisibleArea.wrapped ? "Wrapped":"Not Wrapped");
+    if( (penx >= topStickyVisibleArea.left) &&
+	(penx <= (topStickyVisibleArea.right)))
     {
-	//g_debug("ON BOTTOM STICKY\n");
-	draw = FALSE;
+	if(topStickyVisibleArea.wrapped != (	(peny > topStickyVisibleArea.top) &&
+						(peny <= (topStickyVisibleArea.bottom)) ) )
+	{
+	    g_debug("ON BOTTOM STICKY\n");
+	    draw = FALSE;
+	}
     }
 
+
+    
+    g_debug("(%f,%f) (%f,%f) (%f,%f) %s\n",penx,peny,
+   	    bottomStickyVisibleArea.left,bottomStickyVisibleArea.top,
+   	    bottomStickyVisibleArea.right,bottomStickyVisibleArea.bottom,
+	    bottomStickyVisibleArea.wrapped ? "Wrapped":"Not Wrapped");
+    if( (penx >= bottomStickyVisibleArea.left) &&
+	(penx <= (bottomStickyVisibleArea.right)))
+    {
+	if(bottomStickyVisibleArea.wrapped != (	(peny > bottomStickyVisibleArea.top) &&
+						(peny <= (bottomStickyVisibleArea.bottom)) ) )
+	{
+	    g_debug("ON BOTTOM STICKY\n");
+	    draw = FALSE;
+	}
+    }
     
 
 
@@ -1947,7 +1979,7 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 {
     
     static cairo_surface_t *paperSurface = NULL;
-    static Rectangle Paper = {0,0,400,600};
+    static Rectangle Paper = {0.0,0.0,400.0,600.0,0.0};
     HandInfo *trackingHand;
 
     g_info("squarePaperHandler\n");
@@ -2286,6 +2318,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    switchArea->topLine =  0.0;
+    
 
     knobNumber += 1;
 
@@ -2308,6 +2342,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    switchArea->topLine =  0.0;
+    
     knob->handler = CarraigeFastKnobHandler;
 
     knobNumber += 1;
@@ -2331,6 +2367,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    switchArea->topLine =  0.0;
+    
     knob->handler = carriageSingleKnobHandler;
 
     knobNumber += 1;
@@ -2354,6 +2392,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    switchArea->topLine =  0.0;
+    
     knob->handler = drumSingleKnobHandler;
 
     knobNumber += 1;
@@ -2378,6 +2418,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    switchArea->topLine =  0.0;
+    
     knob->handler = DrumFastKnobHandler;
     knobNumber += 1;
 
@@ -2401,6 +2443,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    switchArea->topLine =  0.0;
+    
     knob->handler = penUpDownHandler;
     
     knobNumber += 1;
@@ -2425,6 +2469,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = knob->ypos;	
     switchArea->width = knob->width;
     switchArea->height = knob->height;
+    switchArea->topLine =  0.0;
+    
     knob->handler = manualHandler;
     
     knobNumber += 1;
@@ -2456,6 +2502,8 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     switchArea->y = 424;	
     switchArea->width = 38;
     switchArea->height = 29;
+    switchArea->topLine =  0.0;
+    
     //knob->handler = stickyTapeHandler;   // Not called
 
     knobNumber += 1;
