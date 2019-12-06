@@ -996,16 +996,20 @@ HandInfo *getTrackingXY(gdouble *hx,gdouble *hy)
     
     if(LeftHandInfo.Fsm->state == TRACKING_HAND)
     {
-	*hx = LeftHandInfo.FingerAtX;
-	*hy = LeftHandInfo.FingerAtY;
+//	*hx = LeftHandInfo.FingerAtX;
+//	*hy = LeftHandInfo.FingerAtY;
+	if(hx) modf(LeftHandInfo.FingerAtX,hx);
+	if(hy) modf(LeftHandInfo.FingerAtY,hy);
 	
 	tracking = &LeftHandInfo;
     }
 
     if(RightHandInfo.Fsm->state == TRACKING_HAND)
     {
-	*hx = RightHandInfo.FingerAtX;
-	*hy = RightHandInfo.FingerAtY;
+	//*hx = RightHandInfo.FingerAtX;
+	//*hy = RightHandInfo.FingerAtY;
+	if(hx) modf(RightHandInfo.FingerAtX,hx);
+	if(hy) modf(RightHandInfo.FingerAtY,hy);
 
 	tracking = &RightHandInfo;
     }
