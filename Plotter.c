@@ -87,7 +87,7 @@ static GdkPixbuf *paperSmall_pixbuf;
 static int paperSize = 0;
 static gdouble initialDrop = 0.0;
 static gdouble paperBottom,paperTop;
-
+static gdouble stickyBottom,stickyTop;
 
 static struct knobInfo
 {
@@ -745,7 +745,12 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     // Draw paper controlled by new state based wrapping algorithm
 
     if(PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED)
-    {
+    {   // Clipping is set up so that bottom sticky is drawn correctly at the top and bottom
+	cairo_save(cr);
+
+	cairo_rectangle(cr,PaperArea.x,0.0,PaperArea.width,LINES_VISIBLE+DRUM_TOP);
+	cairo_clip(cr);
+	
 	switch(showing)
 	{
 
@@ -766,7 +771,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	    break;
 
 	case 3:
-	    // Nothing to draw
+	    // No Paper to draw
+	    
 	    break;
 	case 4:
 	    //g_debug("4: paperBottom-DRUM_TOP=%.1f\n",paperBottom-DRUM_TOP);
@@ -922,6 +928,40 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	    
 
 	}
+
+	if( (stickyTop <= LINES_VISIBLE ) && (stickyBottom <= LINES_VISIBLE))
+	{
+	    g_debug("SHOWING WHOLE STICKY\n");
+	    // Show complete bottom sticky
+	    gdk_cairo_set_source_pixbuf(cr,sticky_pixbuf,bottomStickyArea.x,stickyTop+DRUM_TOP);
+	    cairo_paint(cr);
+
+
+	}
+	else if(stickyBottom <= STICKY_HIGH)
+	{
+	     g_debug("SHOWING PART OF STICKY AT TOP\n");
+	     // Draw from the top of drum down to the bottom edge of the sticky
+	    gdk_cairo_set_source_pixbuf(cr,sticky_pixbuf,bottomStickyArea.x,-STICKY_HIGH+(stickyBottom+DRUM_TOP));
+	    cairo_rectangle(cr,bottomStickyArea.x,DRUM_TOP,bottomStickyArea.width,stickyBottom);
+	    cairo_fill(cr);
+
+	}
+	else if(stickyTop <= LINES_VISIBLE)
+	{
+	    g_debug("SHOWING PART OF STICKY AT BOTTOM\n");
+	    //  Draw from the top of the sticky down to the bottom edge of the drum
+	    gdk_cairo_set_source_pixbuf(cr,sticky_pixbuf,bottomStickyArea.x,stickyTop+DRUM_TOP);
+	    cairo_rectangle(cr,bottomStickyArea.x,stickyTop+DRUM_TOP,bottomStickyArea.width,
+			    LINES_VISIBLE-stickyTop);
+	    cairo_fill(cr);
+
+	}    
+	    
+
+
+
+	cairo_restore(cr);
     }
 
 
@@ -1130,10 +1170,10 @@ struct wrapping {
 struct wrapping wrappingTableA[] =
 {
     { 0,    0,    ID,     1,    0,    0,   },
-    { 1,    1,    BP3,    2,    TP2,  4,   },
-    { 2,    2,    TP3,    3,    BP2,  3,   },
+    { 1,    1,    BP3,    2,    0,    0,   },
+    { 2,    2,    TP3,    3,    BP3,  1,   },
     { 3,    3,    BP2,    4,    TP3,  2,   },
-    { 4,    4,    TP2,    1,    BP3,  1,   },
+    { 4,    4,    TP2,    1,    BP2,  3,   },
     {-1,    0,    0,      0,    0,    0,   }
 };
 
@@ -1268,6 +1308,12 @@ static void wrappingPaperNew(gdouble direction)
     wrapRange(paperTop,DRUM_HIGH);
     wrapRange(paperBottom,DRUM_HIGH);
 
+    stickyBottom -= direction; 
+    stickyTop  -= direction;
+    wrapRange(stickyBottom,DRUM_HIGH);
+    wrapRange(stickyTop,DRUM_HIGH);
+
+    
 
     if(paperTop == (DRUM_HIGH-DRUM_TOP))
     {
@@ -1347,200 +1393,10 @@ static void wrappingPaper(gdouble direction)
     //g_debug("wrappedPaper=%.1f  unwrappedPaper=%.1f %.1f\n",wrappedPaper,unwrappedPaper,direction);
 
 
-#if 0
-
-    switch(wrappingState)
-    {
-    case 1:
-	if( (prevWrappedPaper < LINES_VISIBLE) && (wrappedPaper >= LINES_VISIBLE))
-	{
-	    g_debug("1 -> 2 \n");
-
-	    wrappingState = 2;
-	}
-	break;
-
-    case 2:
-	if( (prevWrappedPaper >= LINES_VISIBLE) && (wrappedPaper < LINES_VISIBLE))
-	{
-	    g_debug("2 -> 1 \n");
-
-	    wrappingState = 1;
-	}
-
-	else if( (prevUnwrappedPaper > 0.0) && (unwrappedPaper <= 0.0))
-	{
-	    g_debug("2 -> 3 \n");
-
-	    wrappingState = 3;
-	}
-	break;
-
-    case 3:
-	if( (prevUnwrappedPaper < 0.0) && (unwrappedPaper >= 0.0))
-	{
-	    g_debug("3 -> 2 \n");
-
-	    wrappingState = 2;
-	}
-	else if( (prevWrappedPaper < DRUM_HIGH) && (wrappedPaper >= DRUM_HIGH))
-	{
-	    g_debug("3 -> 4 \n");
-
-	    wrappingState = 4;
-	}
-	else if( (-prevUnwrappedPaper < LINES_VISIBLE) && (-unwrappedPaper >= LINES_VISIBLE))
-	{
-	    g_debug("3 -> 7 \n");
-
-	    wrappingState = 7;	    
-	}
-	
-	break;
-
-    case 4:
-	g_debug("State 4 prevWrappedUnwrappedPaper=%.1f wrappedUnwrrappedPaper=%.1f \n",
-		prevWrappedUnwrappedPaper,wrappedUnwrappedPaper);
-	if( (prevWrappedPaper > DRUM_HIGH) && (wrappedPaper <= DRUM_HIGH))
-	{
-	    g_debug("4 -> 3 \n");
-
-	    wrappingState = 3;
-	}
-	//else if( (-prevUnwrappedPaper+DRUM_TOP < DRUM_HIGH) && (-unwrappedPaper+DRUM_TOP >= DRUM_HIGH))
-	else if( (prevWrappedUnwrappedPaper < DRUM_HIGH) && (wrappedUnwrappedPaper >= DRUM_HIGH))
-	{
-	    g_debug("4 -> 5 \n");
-
-	    wrappingState = 5;	    
-	}
-	break;
-
-
-    case 5:
-	if( (-prevUnwrappedPaper+DRUM_TOP > DRUM_HIGH) && (-unwrappedPaper+DRUM_TOP <= DRUM_HIGH))
-	{
-	    g_debug("5 -> 4 \n");
-
-	    wrappingState = 4;	    
-	}
-	else if((wrappedWrappedPaper == 939.5) && (prevWrappedWrappedPaper==0.0) )
-	{
-	    g_debug("5 -> 7 \n");
-
-	    wrappingState = 7;
-	    
-	}
-	else if((prevWrappedWrappedPaper < LINES_VISIBLE) && (wrappedWrappedPaper >= LINES_VISIBLE) )
-	{
-	    g_debug("5 -> 6 \n");
-
-	    wrappingState = 6;
-	}
-	break;
-
-    case 6:
-	//g_debug("State 6 prevWrappedWrappedPaper=%.1f wrappedWrappedPaper=%.1f \n",prevWrappedWrappedPaper,wrappedWrappedPaper);
-#if 1
-	//if((prevWrappedWrappedPaper > 0.0) && (wrappedWrappedPaper >= 0.0) )
-	if( (prevWrappedWrappedPaper == (PaperArea.height-0.5)) && ( wrappedWrappedPaper == PaperArea.height)) 
-	{
-	    g_debug("6 -> 3 \n");
-	    wrappedPaper = wrappedWrappedPaper;
-	    unwrappedPaper = PaperArea.height - wrappedPaper;
-	    wrappingState = 3;
-	}
-	else  if((prevWrappedWrappedPaper > LINES_VISIBLE) && (wrappedWrappedPaper <= LINES_VISIBLE) )
-	{
-	    g_debug("6 -> 5 \n");
-
-	    wrappingState = 5;
-	}
-#endif
-	break;
-
-    case 7:
-    {
-
-//g_debug("State 7 prevWrappedWrappedPaper=%.1f wrappedWrappedPaper=%.1f \n",prevWrappedWrappedPaper,wrappedWrappedPaper);
-
-	if((prevWrappedWrappedPaper == 939.5) && (wrappedWrappedPaper == 0.0) )
-	{
-	    g_debug("7 -> 5 \n");
-
-	    wrappingState = 5;
-	    
-	} else if( (-prevUnwrappedPaper > LINES_VISIBLE) && (-unwrappedPaper <= LINES_VISIBLE))
-	{
-	    g_debug("7 -> 3 \n");
-
-	    wrappingState = 3;	    
-	}
-	break;
-
-	
-    }
-    default:
-	g_debug("Unhandled state %d\n",wrappingState);
-	break;
-    }
-
-
-#endif
-
-
 
 
 
     
-#if 0
-    
-   
-    if( (direction < 0) && (unwrappedPaper > 0.0)  && (wrappedPaper >= INITIAL_WRAPPED))
-    {
-	gdouble yline;
-    	//cairo_set_source_rgba(visibleSurfaceCr,1.0,1.0,1.0,1.0);
-	//cairo_set_line_width (visibleSurfaceCr, 1);
-	//cairo_set_line_cap  (visibleSurfaceCr, CAIRO_LINE_CAP_BUTT);
-
-	yline = PaperArea.y + topLine - DRUM_TOP - INITIAL_WRAPPED + 1.0;
-	wrapRange(yline,DRUM_HIGH);
-
-	g_debug("yline = %.1f\n",yline);
-
-	gdk_cairo_set_source_pixbuf(visibleSurfaceCr,paperSmall_pixbuf,
-				    PaperArea.x-DRAWABLE_DRUM_LEFT,
-				    yline-PaperArea.height+wrappedPaper-1.0);
-	//cairo_set_source_rgba(visibleSurfaceCr,1.0,0.0,0.0,1.0);
-	cairo_rectangle(visibleSurfaceCr,PaperArea.x- DRAWABLE_DRUM_LEFT,yline-1.0,PaperArea.width+0.0, +1);
-	cairo_fill(visibleSurfaceCr);
-    }
-#endif
-    // TO DO !!
-#if 0    
-    if( (direction > 0) && (wrappedPaper >= INITIAL_WRAPPED)  && (unwrappedPaper > 0.0))
-    {
-	gdouble yline;
-    	cairo_set_source_rgba(visibleSurfaceCr,0.5,0.5,0.5,1.0);
-	cairo_set_line_width (visibleSurfaceCr, 1);
-	cairo_set_line_cap  (visibleSurfaceCr, CAIRO_LINE_CAP_BUTT);
-	yline = PaperArea.y + topLine - DRUM_TOP - INITIAL_WRAPPED + 0.0;
-	if(yline > DRUM_HIGH) yline -= DRUM_HIGH;
-
-	//cairo_set_source_surface (visibleSurfaceCr, drumSurface ,0.0,0.0); //DRAWABLE_DRUM_LEFT,yline);
-	//cairo_rectangle(visibleSurfaceCr,PaperArea.x-1.0- DRAWABLE_DRUM_LEFT,yline-1,PaperArea.width+1, 1.0);
-	//cairo_fill(visibleSurfaceCr);
-	
-	cairo_move_to (visibleSurfaceCr,
-		       PaperArea.x-1.0-DRAWABLE_DRUM_LEFT,
-		       yline);
-	cairo_line_to (visibleSurfaceCr,
-		       PaperArea.x+PaperArea.width+0.0-DRAWABLE_DRUM_LEFT,
-		       yline);
-	cairo_stroke (visibleSurfaceCr);
-	
-    }
-#endif    
 }
 #endif
 
@@ -2032,6 +1888,11 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		paperBottom = initialDrop;
 		paperTop = paperBottom - PaperArea.height;
 		wrapRange(paperTop,DRUM_HIGH);
+
+		stickyBottom = initialDrop +(STICKY_HIGH/2.0); 
+		stickyTop    = initialDrop -(STICKY_HIGH/2.0); 
+		wrapRange(stickyBottom,DRUM_HIGH);
+		wrapRange(stickyTop,DRUM_HIGH);
 		
 
 	    }
@@ -2040,7 +1901,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 
 	    
-#if 0
+
 	     // Add the bottom sticky
 	    bottomSticky = TRUE;
 	    bottomStickyArea.x = FingerPressedAtX-28;
@@ -2050,7 +1911,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    bottomStickyArea.topLine = topLine;
 
 
-	        
+#if 0	        
 	    doFSM(&PlotterPaperFSM,PLOTTER_FIX_BOTTOM_EDGE,NULL);
 	    trackingHand->showingHand = HAND_EMPTY;
 	    wrappedPaper = INITIAL_WRAPPED;
@@ -2778,7 +2639,11 @@ static void fastMovePen( __attribute__((unused)) unsigned int value)
 
 static void squarePaperHandler(__attribute__((unused)) int state)
 {
-    static Rectangle Paper = {0.0,0.0,400.0,650.0,0.0};
+    //static Rectangle Paper = {0.0,0.0,400.0,80.0,0.0};
+    //static Rectangle Paper = {0.0,0.0,400.0,95.0,0.0};
+    //static Rectangle Paper = {0.0,0.0,400.0,120.0,0.0};
+    //static Rectangle Paper = {0.0,0.0,400.0,200.0,0.0};
+    static Rectangle Paper = {0.0,0.0,400.0,400.0,0.0};
     HandInfo *trackingHand;
     // gdouble topLine,fx,fy,top,bottom;
 //    gboolean wrapped = FALSE;
