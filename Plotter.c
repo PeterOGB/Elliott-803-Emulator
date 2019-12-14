@@ -538,20 +538,20 @@ void showArea2(cairo_t *cr, GdkPixbuf *pixbuf,
 
     if(bot < top)
     {
-	//gdk_cairo_set_source_pixbuf (cr, pixbuf , atX,top);
-	cairo_set_source_rgba(cr,1.0,0.0,0.0,1.0);
+	gdk_cairo_set_source_pixbuf (cr, pixbuf , atX,top);
+	//cairo_set_source_rgba(cr,1.0,0.0,0.0,1.0);
 	cairo_rectangle(cr, atX,top,itemWidth,visibleHeight-top);
 	cairo_fill(cr);
 	    
-	//gdk_cairo_set_source_pixbuf (cr, pixbuf , atX,top-visibleHeight);
-	cairo_set_source_rgba(cr,0.0,1.0,0.0,1.0);
+	gdk_cairo_set_source_pixbuf (cr, pixbuf , atX,top-visibleHeight);
+	//cairo_set_source_rgba(cr,0.0,1.0,0.0,1.0);
 	cairo_rectangle(cr, atX,0.0,itemWidth,bot);
 	cairo_fill(cr);
     }
     else
     {
-//	gdk_cairo_set_source_pixbuf (cr, pixbuf , atX,top);
-	cairo_set_source_rgba(cr,0.0,0.0,1.0,1.0);
+	gdk_cairo_set_source_pixbuf (cr, pixbuf , atX,top);
+	//cairo_set_source_rgba(cr,0.0,0.0,1.0,1.0);
 	cairo_rectangle(cr, atX,top,itemWidth,itemHeight);
 	cairo_fill(cr);
     }
@@ -1660,6 +1660,10 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    topLine = peny - MIDDLE_LINE;
 	    wrapRange(topLine,DRUM_HIGH);
 
+	    //  Set the paper area top line here now that it is fixed to the drum
+	    // Drum may have moved since it was dropped.
+	    PaperArea.topLine = topLine;
+	    
 	    //wrappedPaper = FingerPressedAtY - DRUM_TOP;
 	    //unwrappedPaper = PaperArea.height - wrappedPaper;
 	    
