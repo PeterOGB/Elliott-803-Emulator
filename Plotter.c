@@ -82,7 +82,13 @@ static VisibleArea bottomStickyVisibleArea = {0.0,0.0,0.0,0.0,FALSE};
 //static gdouble wrappedPaper = 0.0;
 static gdouble unwrappedPaper = 0.0;
 static gdouble attachingLine = 0.0;
+
 static GdkPixbuf *paperSmall_pixbuf;
+static GdkPixbuf *paperLarge_pixbuf;
+
+static cairo_surface_t *paperLargeSurface = NULL;
+static cairo_surface_t *paperSmallSurface = NULL;
+static cairo_t *paperSmallCr,*paperLargeCr;
 
 static int paperSize = 0;
 static gdouble initialDrop = 0.0;
@@ -1514,7 +1520,34 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    topStickyArea.height = STICKY_HIGH;
 	    topStickyArea.topLine = topLine;
 
-	    
+	    {
+		gboolean wrapped = FALSE;
+
+
+		bottom = topLine +  (FingerPressedAtY - DRUM_TOP) +(STICKY_HIGH/2.0); 
+		top    = topLine + (FingerPressedAtY - DRUM_TOP) -(STICKY_HIGH/2.0); 
+		wrapRange(stickyBottom,DRUM_HIGH);
+		wrapRange(stickyTop,DRUM_HIGH);
+
+
+		if(top > bottom)
+		{
+		    gdouble t;
+		    t = top;
+		    top = bottom;
+		    bottom = t;
+		    wrapped = TRUE;
+		}
+		    
+
+		
+		VisibleArea sticky = {topStickyArea.x-DRAWABLE_DRUM_LEFT,
+				    top,
+				    topStickyArea.x-DRAWABLE_DRUM_LEFT+topStickyArea.width,
+				    bottom,
+				    wrapped};
+		topStickyVisibleArea = sticky;
+	    }	    
 	    updateVisibleSurface(TRUE,FALSE,0.0,TRUE,TRUE);
 
 	    doFSM(&PlotterPaperFSM,PLOTTER_FIX_TOP_EDGE,NULL);
@@ -1563,10 +1596,10 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    }
 
 	    VisibleArea pva = {PaperArea.x-DRAWABLE_DRUM_LEFT,
-				  top,
-				  PaperArea.x-DRAWABLE_DRUM_LEFT+PaperArea.width,
-				  bottom,
-				  wrapped};
+			       top,
+			       PaperArea.x-DRAWABLE_DRUM_LEFT+PaperArea.width,
+			       bottom,
+			       wrapped};
 	    PaperVisibleArea = pva;
 #endif
 
@@ -1763,6 +1796,62 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    bottomStickyArea.height = STICKY_HIGH;
 	    bottomStickyArea.topLine = topLine;
 
+
+	    {
+		gboolean wrapped = FALSE;
+
+		top = stickyTop + topLine;
+		bottom = stickyBottom + topLine;
+		wrapRange(bottom,DRUM_HIGH);
+		wrapRange(top,DRUM_HIGH);
+		
+		
+		if(top > bottom)
+		{
+		    gdouble t;
+		    t = top;
+		    top = bottom;
+		    bottom = t;
+		    wrapped = TRUE;
+		}
+		    
+
+		
+		VisibleArea sticky = {bottomStickyArea.x-DRAWABLE_DRUM_LEFT,
+				    top,
+				    bottomStickyArea.x-DRAWABLE_DRUM_LEFT+bottomStickyArea.width,
+				    bottom,
+				    wrapped};
+		bottomStickyVisibleArea = sticky;
+	    }
+
+	    // Set the paper visible area used to detect when the pen is over the paper
+	    // when drawing points.
+	    {
+		gboolean wrapped = FALSE;
+	    
+		top = PaperArea.y - DRUM_TOP + topLine;
+		bottom = top + PaperArea.height;
+		wrapRange(bottom,DRUM_HIGH);
+		wrapRange(top,DRUM_HIGH);
+		
+		if(top > bottom)
+		{
+		    gdouble t;
+		    t = top;
+		    top = bottom;
+		    bottom = t;
+		    wrapped = TRUE;
+		}
+
+		VisibleArea pva = {PaperArea.x-DRAWABLE_DRUM_LEFT,
+				   top,
+				   PaperArea.x-DRAWABLE_DRUM_LEFT+PaperArea.width,
+				   bottom,
+				   wrapped};
+		PaperVisibleArea = pva;
+	    }
+	    
 
 #if 0	        
 	    doFSM(&PlotterPaperFSM,PLOTTER_FIX_BOTTOM_EDGE,NULL);
@@ -2226,8 +2315,6 @@ static void plotPoint(void)
 	    draw = FALSE;
 	}
     }
-
-
     
     /* g_debug("(%.1f,%.1f) (%.1f,%.1f) (%.1f,%.1f) %s\n",penx,peny, */
     /* 	    bottomStickyVisibleArea.left,bottomStickyVisibleArea.top, */
@@ -2243,22 +2330,20 @@ static void plotPoint(void)
 	    draw = FALSE;
 	}
     }
-    
-
 
     if(draw)
     {
-
+	// plot point on the visible Surface.
 	cairo_set_line_width (visibleSurfaceCr, 1);
 	cairo_set_line_cap  (visibleSurfaceCr, CAIRO_LINE_CAP_ROUND);
 	cairo_move_to (visibleSurfaceCr,penx,peny);
 	cairo_line_to (visibleSurfaceCr,penx,peny);
 	cairo_stroke (visibleSurfaceCr);
 	
-	g_debug("(%.1f,%.1f) (%.1f,%.1f) (%.1f,%.1f) %s\n",penx,peny,
-		PaperVisibleArea.left,PaperVisibleArea.top,
-		PaperVisibleArea.right,PaperVisibleArea.bottom,
-		PaperVisibleArea.wrapped ? "Wrapped":"Not Wrapped");
+	/* g_debug("PVA (%.1f,%.1f) (%.1f,%.1f) (%.1f,%.1f) %s\n",penx,peny, */
+	/* 	PaperVisibleArea.left,PaperVisibleArea.top, */
+	/* 	PaperVisibleArea.right,PaperVisibleArea.bottom, */
+	/* 	PaperVisibleArea.wrapped ? "Wrapped":"Not Wrapped"); */
 	cairo_set_source_rgba(visibleSurfaceCr,0.0,0.0,0.0,1.0);
 	if( (penx >= PaperVisibleArea.left) &&
 	    (penx <= (PaperVisibleArea.right)))
@@ -2275,33 +2360,38 @@ static void plotPoint(void)
        
        if(overPaper)
        {
-	
+	   gdouble x,y;
 	//printf("ON  Paper %d %.1f\n",PenX,(2.0*PaperArea.x));
 	// Draw full resolution version if paper loaded
 	   //if(paperSurfaceCr != NULL)
 
-	   g_debug("2*PaperVisibleArea.top=%.1f 2*PaperVisibleArea.bottom=%.1f\n",
-		   2.0*PaperVisibleArea.top,2.0*PaperVisibleArea.bottom);
+	   // g_debug("PaperVisibleArea.top=%.1f PaperVisibleArea.bottom=%.1f\n",
+	   //	   PaperVisibleArea.top,PaperVisibleArea.bottom);
 	   
 	   if(!PaperVisibleArea.wrapped)
 	   {
-	       gdouble x,y;
-
-	       x =  penx-(2.0*PaperVisibleArea.left);
-	       y =  peny-(2.0*PaperVisibleArea.top);
+	       x = 2.0 * (penx-PaperVisibleArea.left);
+	       y = 2.0 * (peny-PaperVisibleArea.top);
 
 	       g_debug("(x,y) = (%.1f,%.1f)\n",x,y);
 	   }
 	   else
 	   {
-	       gdouble x,y;
-
-	       x =  penx-(2.0*PaperVisibleArea.left);
-	       y =  peny-(2.0*PaperVisibleArea.bottom);
-	       wrapRange(y,2.0*DRUM_HIGH);
+	       x =  2.0 * (penx-PaperVisibleArea.left);
+	       y =  2.0 * (peny-PaperVisibleArea.bottom);
+	       wrapRange(y,DRUM_HIGH);
 
 	       g_debug("(x,y) = (%.1f,%.1f)\n",x,y);
 	   }
+
+	   x += 0.5;
+	   y += 0.5;
+	   cairo_set_source_rgba(paperLargeCr,0.0,0.0,1.0,1.0);
+	   cairo_move_to (paperLargeCr,x,y);
+	   cairo_line_to (paperLargeCr,x,y);
+	   cairo_stroke (paperLargeCr);
+
+	   
        }
     }
 }
@@ -2419,9 +2509,10 @@ static void fastMovePen( __attribute__((unused)) unsigned int value)
 
 static void squarePaperHandler(__attribute__((unused)) int state)
 {
+    static Rectangle Paper  = {0.0,0.0,0.0,0.0,0.0};
     //static Rectangle Paper = {0.0,0.0,400.0,80.0,0.0};
     //static Rectangle Paper = {0.0,0.0,400.0,95.0,0.0};
-    static Rectangle Paper = {0.0,0.0,400.0,120.0,0.0};
+    //static Rectangle Paper = {0.0,0.0,400.0,120.0,0.0};
     //static Rectangle Paper = {0.0,0.0,400.0,200.0,0.0};
     //static Rectangle Paper = {0.0,0.0,400.0,340.0,0.0};
     //static Rectangle Paper = {0.0,0.0,400.0,621.0,0.0};
@@ -2469,6 +2560,10 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 			      wrapped};
 	PaperVisibleArea = sticky;
 #endif
+
+	Paper.width  = gdk_pixbuf_get_width(paperSmall_pixbuf);
+	Paper.height = gdk_pixbuf_get_height(paperSmall_pixbuf);
+	
 	trackingHand = getTrackingXY(&fx,&fy);
 	topLine = peny - MIDDLE_LINE;
 	wrapRange(topLine,DRUM_HIGH);
@@ -2605,13 +2700,14 @@ void PlotterTidy(GString *userPath)
     
     cairo_surface_write_to_png (cairo_get_target(drumSurfaceCr),drumFileName->str);
 
-    if(paperSurfaceCr != NULL)
+    if(paperLargeCr != NULL)
     {
 	// Eventually will need to save the paper position and size in a config file.
-	g_string_printf(drumFileName,"%s%s",userPath->str,"Paper.png");
+	g_string_printf(drumFileName,"%s%s",userPath->str,"SavedPaper.png");
 	g_debug("Writing paper image to %s\n",drumFileName->str);
 
-	cairo_surface_write_to_png (cairo_get_target(paperSurfaceCr),drumFileName->str);
+	cairo_surface_flush(paperLargeSurface);
+	cairo_surface_write_to_png (paperLargeSurface,drumFileName->str);
     }
     else
 	g_debug("Paper image NOT SAVED\n");
@@ -2752,16 +2848,74 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 	    my_gdk_pixbuf_new_from_file(fileName->str);
     }
 
+#if 0
+    
+cairo_surface_t *scale_to_half(cairo_surface_t *s, int orig_width, int
+orig_height)
+{
+    cairo_surface_t *result = cairo_surface_create_similar(s,
+            cairo_surface_get_content(s), orig_width/2, orig_height/2);
+    cairo_t *cr = cairo_create(result);
+    cairo_scale(cr, 0.5, 0.5);
+    cairo_set_source_surface(cr, s, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    return result;
+}
+#endif
+
+
+    //g_string_printf(fileName,"%sPaperSmall3.png",userPath->str);
+    g_string_printf(fileName,"%sPaper800x800.png",userPath->str);
+    paperLarge_pixbuf =
+	gdk_pixbuf_new_from_file(fileName->str,NULL);
+
+    g_debug("paperLarge_pixbuf = %p\n",paperLarge_pixbuf);
 
     
+    {
+	gint h,w;
+	h = gdk_pixbuf_get_height(paperLarge_pixbuf);
+	w = gdk_pixbuf_get_width(paperLarge_pixbuf); 
 
-    g_string_printf(fileName,"%sPaperSmall3.png",userPath->str);
-    paperSmall_pixbuf =
-	gdk_pixbuf_new_from_file(fileName->str,NULL);	
+	// This is the full resolution version 
+	paperLargeSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,w,h);
+	paperLargeCr = cairo_create(paperLargeSurface);
+	cairo_set_operator (paperLargeCr,CAIRO_OPERATOR_SOURCE);
+	gdk_cairo_set_source_pixbuf (paperLargeCr,paperLarge_pixbuf,0.0,0.0);
+	cairo_paint(paperLargeCr);
 
+	
+	cairo_set_line_width (paperLargeCr, 1);
+	cairo_set_line_cap(paperLargeCr, CAIRO_LINE_CAP_ROUND);
+	cairo_set_antialias(paperLargeCr,CAIRO_ANTIALIAS_NONE);
+	
+	paperSmallSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,w/2,h/2);
+	paperSmallCr = cairo_create(paperSmallSurface);
+
+
+
+	cairo_scale(paperSmallCr, 0.5, 0.5);
+	cairo_set_source_surface(paperSmallCr,paperLargeSurface,0,0);
+	cairo_set_operator(paperSmallCr,CAIRO_OPERATOR_SOURCE);
+	cairo_paint(paperSmallCr);
+
+	cairo_surface_flush(paperSmallSurface);
+	
+	paperSmall_pixbuf =
+	    gdk_pixbuf_get_from_surface (paperSmallSurface,
+					 0,0,w/2,h/2);
+
+	//cairo_destroy(paperSmallCr);
+	//cairo_destroy(paperLargeCr);
+	
+    }
+
+    
     g_debug("paperSmall_pixbuf=%p\n",paperSmall_pixbuf);
 
-    
+ 
     
     g_string_printf(fileName,"%sVisible2.png",userPath->str);
     visible_pixbuf =
