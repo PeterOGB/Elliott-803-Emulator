@@ -1211,12 +1211,6 @@ void updateVisibleSurface(gboolean showPaper,
 			  gboolean showTopSticky,
 			  gboolean showBottomSticky)
 {
-#if 1    
-//    static gdouble paperTopLine = 0.0;
-
-//    if(setPaperPosition)
-//	paperTopLine = paperPosition;
-
     
     //Reset the visible surface to the drum image before transfering
     // Paper and stickies into the visible surface.
@@ -1253,7 +1247,7 @@ void updateVisibleSurface(gboolean showPaper,
 		  DRAWABLE_DRUM_LEFT, DRUM_TOP,
 		  bottomStickyArea.topLine);
     }	    
-#endif	    
+    
 }    
 
 
@@ -1537,7 +1531,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    //unwrappedPaper = PaperArea.height - wrappedPaper;
 	    
 	    doFSM(&PlotterPaperFSM,PLOTTER_FIX_BOTTOM_EDGE,NULL);
-	    trackingHand->showingHand = HAND_EMPTY;
+	    trackingHand->showingHand = HAND_GRABBING; //HAND_EMPTY;
 
 	    //g_debug("wrappedPaper = %.1f\n",wrappedPaper);
 
@@ -1703,6 +1697,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
     {
 	gdouble fingerX,fingerY,topLine;
 	topLine = peny - MIDDLE_LINE;
+	wrapRange(topLine,DRUM_HIGH);
 	
 	
 	fingerX = FingerPressedAtX - DRAWABLE_DRUM_LEFT;
@@ -1885,6 +1880,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     int n,ix,iy;
     enum  handimages showingHand;
     gdouble hx,hy;
+    gdouble fingerX,fingerY,topLine;
     gboolean overKnob = FALSE;
     gboolean overSticky = FALSE;
     
@@ -1895,10 +1891,19 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     ix = (int) hx;
     iy = (int) hy;
 
+    topLine = peny - MIDDLE_LINE;
+    wrapRange(topLine,DRUM_HIGH);
+	
+	
+    fingerX = hx - DRAWABLE_DRUM_LEFT;
+    fingerY = hy - DRUM_TOP + topLine;
+
+
+    
     //showingHand = HAND_EMPTY;
     showingHand = movingHand->showingHand;
 
-
+    // Over a knob ?
     for(n=0;n<knobCount2;n++)
     {
 	if( (ix >= OneFingerAreas[n].x) &&
@@ -1911,6 +1916,7 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	}
     }
 
+    // Over the sticky dispenser
     if( (ix >= OneFingerAreas[stickyKnobNumber].x) &&
 	(ix <= (OneFingerAreas[stickyKnobNumber].x+OneFingerAreas[stickyKnobNumber].width)) &&
 	(iy >= OneFingerAreas[stickyKnobNumber].y) &&
@@ -1919,6 +1925,17 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	overSticky = TRUE;
     }
 
+    if( (bottomStickyVisibleArea != NULL) && (fingerX >= bottomStickyVisibleArea->left) &&
+	(fingerX <= (bottomStickyVisibleArea->right)))
+    {
+	if(bottomStickyVisibleArea->wrapped != (	(fingerY > bottomStickyVisibleArea->top) &&
+							(fingerY <= (bottomStickyVisibleArea->bottom)) ) )
+	{
+	    overSticky = TRUE;
+	}
+    }
+
+    
     
       
     if(showingHand == HAND_EMPTY)
