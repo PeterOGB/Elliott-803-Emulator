@@ -67,7 +67,7 @@ static gdouble deferedMotionX,deferedMotionY;
 static GList *pressedKeys = NULL;
 static GdkSeat *seat = NULL;
 
-static Rectangle OneFingerAreas[20];
+//static Rectangle OneFingerAreas[20];
 // Not static so that DrawHandsNew can read it.
 HandInfo *handHoldingPaper = NULL;
 //static int wrappingState  = 1;
@@ -78,11 +78,6 @@ static VisibleArea *topStickyVisibleArea = NULL; //{0.0,0.0,0.0,0.0,FALSE};
 static gboolean bottomSticky = FALSE;
 static Rectangle bottomStickyArea = {0.0,0.0,0.0,0.0,0.0}; 
 static VisibleArea *bottomStickyVisibleArea = NULL; //{0.0,0.0,0.0,0.0,FALSE};
-
-//static gdouble WrappedPaper = 0.0;
-//static gdouble wrappedPaper = 0.0;
-//static gdouble unwrappedPaper = 0.0;
-//static gdouble attachingLine = 0.0;
 
 static GdkPixbuf *paperSmall_pixbuf;
 static GdkPixbuf *paperLarge_pixbuf;
@@ -103,7 +98,7 @@ static struct knobInfo
     void (*handler)(int state);
     int width,height;
     int pixIds[3];
-    int xpos,ypos;
+    int top,left,bottom,right;
     gboolean changed;
     enum WiringEvent wire;
 
@@ -113,7 +108,7 @@ static struct knobInfo
 // penx and peny are full resolution but half sized so steps will be
 // +/- 0.5 
 static gdouble penx,peny;    // For half resolution image
-//static gdouble PenX,PenY;    // For full resolution image (not needed anymore) 
+static gdouble topLine;    // Line at the top of the drum area 
 static gboolean PenDown = TRUE;
 static cairo_t *visibleSurfaceCr = NULL;
 static Rectangle PaperArea = {0.0,0.0,0.0,0.0,0.0};
@@ -543,7 +538,6 @@ void showArea2(cairo_t *cr, GdkPixbuf *pixbuf,
     wrapRange(bot,visibleHeight);
     wrapRange(top,visibleHeight);
 
-
     g_debug("top=%.1f bot=%.1f\n",top,bot);
 
     if(bot < top)
@@ -562,7 +556,6 @@ void showArea2(cairo_t *cr, GdkPixbuf *pixbuf,
 	cairo_rectangle(cr, atX,top,itemWidth,itemHeight);
 	cairo_fill(cr);
     }
-
 }
 
 
@@ -596,7 +589,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     //static cairo_t *drumSurfaceCr = NULL;
     GtkAllocation  DrawingAreaAlloc;
     struct knobInfo *knob;
-    gdouble topLine;
+    //gdouble topLine;
 
     if(firstCall)
     {
@@ -671,13 +664,10 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	    if(knob->pixIds[knob->state] != -1)
 		gdk_cairo_set_source_pixbuf (backgroundSurfaceCr,
 					     knobPixbufs[knob->pixIds[knob->state]],
-					     knob->xpos,knob->ypos);
+					     knob->left,knob->top);
 	    cairo_paint (backgroundSurfaceCr);
-
 	}
     }
-
-
     
     // Draw manual button in the background surface
     {
@@ -696,8 +686,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     cairo_paint(cr);
 
     
-    topLine = peny - MIDDLE_LINE;
-    if(topLine < 0) topLine = DRUM_HIGH + topLine;
+    //topLine = peny - MIDDLE_LINE;
+    //if(topLine < 0) topLine = DRUM_HIGH + topLine;
 
 
     // Draw the part of the drum surface visible in the window
@@ -742,15 +732,12 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	
 	switch(showingPaper)
 	{
-
 	case 1:
 	    // Draw from top of paper to bottom of paper.
 	    gdk_cairo_set_source_pixbuf(cr,paperSmall_pixbuf,PaperArea.x,paperTop+DRUM_TOP);
 	    cairo_rectangle(cr,PaperArea.x,paperTop+DRUM_TOP,PaperArea.width,PaperArea.height);
 	    cairo_fill(cr);
 	    break;
-
-
 	case 2:
 	    //  Draw from the top of the paperdown to the bottom edge of the drum
 	    gdk_cairo_set_source_pixbuf(cr,paperSmall_pixbuf,PaperArea.x,paperTop+DRUM_TOP);
@@ -758,10 +745,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 			    LINES_VISIBLE-paperTop);
 	    cairo_fill(cr);
 	    break;
-
 	case 3:
 	    // No Paper to draw
-	    
 	    break;
 	case 4:
 	    //g_debug("4: paperBottom-DRUM_TOP=%.1f\n",paperBottom-DRUM_TOP);
@@ -825,13 +810,9 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	    cairo_fill(cr);
 
 	    break;
-
-
 	default:
 	    g_debug("Unknown showingPaper=%d\n",showingPaper);
 	    break;
-	    
-
 	}
 
 	// Now draw the bottom sticky (or parts of it as needed
@@ -866,14 +847,6 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	}    
 	cairo_restore(cr);
     }
-
-
-
-
-
-
-    
-    
 
     // Not too sure about all the 0.5s  in here !
     // Draw carraige support bars
@@ -959,9 +932,6 @@ static const char *WrappingEventNames[] =
 { "Initial Drop",
   "Top Passing 1","Top Passing 2","Top Passing 3",
   "Bottom Passing 1","Bottom Passing 2","Bottom Passing 3" };
-  
-    
-
 
 struct wrapping {
     int state;
@@ -971,7 +941,6 @@ struct wrapping {
     int eventUnwrapping;
     int prevState;
 };
-
 
 struct wrapping wrappingTableA[] =
 {
@@ -1119,13 +1088,10 @@ static void wrappingPaperNew(gdouble direction)
     wrapRange(stickyBottom,DRUM_HIGH);
     wrapRange(stickyTop,DRUM_HIGH);
 
-    
-
     if(paperTop == (DRUM_HIGH-DRUM_TOP))
     {
 	g_debug("Top Passing 1\n");
 	doWrappingFsm(TP1,dirFlag);
-	
     }
     else if(paperTop == 0.0)
     {
@@ -1152,11 +1118,7 @@ static void wrappingPaperNew(gdouble direction)
 	g_debug("Bottom Passing 3\n");
 	doWrappingFsm(BP3,dirFlag);
     }
-
-
 }
-
-
 
 
 #if 1
@@ -1276,20 +1238,14 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	knob = knobs;
 	for(int knobNumber= 0; knobNumber < knobCount; knobNumber += 1,knob++)
 	{
-	    left = knob->xpos;
-	    right = left + knob->width;
-	    top = knob->ypos;
-	    bottom = top + knob->height;
-
-	    if((FingerPressedAtX >= left) && (FingerPressedAtX <= right) &&
-	       (FingerPressedAtY >= top) && (FingerPressedAtY <= bottom))
+	    if((FingerPressedAtX >= knob->left) && (FingerPressedAtX <= knob->right) &&
+	       (FingerPressedAtY >= knob->top) && (FingerPressedAtY <= knob->bottom))
 	    {
-
 		switch(knob->type)
 		{
 		case 0:
 		case 2:
-		    if((FingerPressedAtX - left) >= (knob->width/2))
+		    if((FingerPressedAtX - knob->left) >= (knob->width/2))
 		    {
 			if(knob->state < 2) knob->state += 1;
 			//g_info("Right Hit button number %d %d ",knobNumber,knob->state);
@@ -1302,7 +1258,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		    knob->changed = TRUE;
 		    break;
 		case 1:
-		    if((FingerPressedAtX - left) >= (knob->width/2))
+		    if((FingerPressedAtX - knob->left) >= (knob->width/2))
 		    {
 			if(knob->state < 2) knob->state = 2;
 			//g_info("Right Hit button number %d %d ",knobNumber,knob->state);
@@ -1315,7 +1271,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		    knob->changed = TRUE;
 		    break;
 		case 3:
-		    
 		    switch(knob->state)
 		    {
 		    case 0:
@@ -1328,7 +1283,8 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 			break;
 		    }
 		    break;
-
+		case 4:
+		    break;
 		default:
 		    break;
 		}
@@ -1337,22 +1293,15 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    }
  
 	}
-	for(int areaNumber = knobCount; areaNumber < knobCount2; areaNumber += 1)
+	knob = &knobs[knobCount];
+	for(int areaNumber = knobCount; areaNumber < knobCount2; areaNumber += 1,knob++)
 	{
-	    OneFingerArea = &OneFingerAreas[areaNumber];
-	    left = OneFingerArea->x;
-	    right = left + OneFingerArea->width;
-	    top = OneFingerArea->y;
-	    bottom = top + OneFingerArea->height;
-
-	    if((FingerPressedAtX >= left) && (FingerPressedAtX <= right) &&
-	       (FingerPressedAtY >= top) && (FingerPressedAtY <= bottom))
+	    if((FingerPressedAtX >= knob->left) && (FingerPressedAtX <= knob->right) &&
+	       (FingerPressedAtY >= knob->top) && (FingerPressedAtY <= knob->bottom))
 	    {
-		if(knobs[areaNumber].handler != NULL) (knobs[areaNumber].handler)(knob->state);
+		if(knob->handler != NULL) (knob->handler)(knob->state);
 	    }
 	}
-
-
     }
     // Check to see if picking up piece of sticky tape
     else if( (trackingHand != NULL) && (trackingHand->showingHand == HAND_GRABBING)  )
@@ -1360,10 +1309,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	//doFSM(&PlotterPaperFSM,PLOTTER_PRESS_STICKY,NULL);
 	trackingHand->showingHand = HAND_STICKY_TAPE;
     }
-
- 
-    
-    
    
     else if(PlotterPaperFSM.state == PLOTTER_HOLDING_PAPER)
     {
@@ -1371,9 +1316,9 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	if(FingerPressedAtY < 150.0)
 	    
 	{
-	    gdouble topLine;
-	    topLine = peny - MIDDLE_LINE;
-	    wrapRange(topLine,DRUM_HIGH);
+	    //gdouble topLine;
+	    //topLine = peny - MIDDLE_LINE;
+	    //wrapRange(topLine,DRUM_HIGH);
 	    PaperArea.topLine = topLine;
 	    
 	    doFSM(&PlotterPaperFSM,PLOTTER_PLACE_PAPER,NULL);
@@ -1392,19 +1337,17 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	else
 	    // Or for folder/bin presses
 	{
-	    for(int areaNumber= knobCount2; areaNumber < stickyKnobNumber; areaNumber += 1)
+	    knob = &knobs[knobCount2];
+	    for(int areaNumber= knobCount2; areaNumber < stickyKnobNumber; areaNumber += 1,knob++)
 	    {
-		OneFingerArea = &OneFingerAreas[areaNumber];
-		left = OneFingerArea->x;
-		right = left + OneFingerArea->width;
-		top = OneFingerArea->y;
-		bottom = top + OneFingerArea->height;
 
-		if((FingerPressedAtX >= left) && (FingerPressedAtX <= right) &&
-		   (FingerPressedAtY >= top) && (FingerPressedAtY <= bottom))
+
+		if((FingerPressedAtX >= knob->left) && (FingerPressedAtX <= knob->right) &&
+		   (FingerPressedAtY >= knob->top) && (FingerPressedAtY <= knob->bottom))
 		{
-		    if(knobs[areaNumber].handler != NULL) (knobs[areaNumber].handler)(0);
+		    if(knob->handler != NULL) (knob->handler)(0);
 		}
+		
 	    }
 	}
 
@@ -1424,20 +1367,21 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    (FingerPressedAtX >= PaperArea.x) &&
 	    (FingerPressedAtX <= PaperArea.x+PaperArea.width))
 	{	
-	    gdouble topLine;
-
-	    topLine = peny - MIDDLE_LINE;
-	    wrapRange(topLine,DRUM_HIGH);
+	    //gdouble topLine;
+	    //topLine = peny - MIDDLE_LINE;
+	    //wrapRange(topLine,DRUM_HIGH);
 	    
 	    g_debug("STICKY WOULD BE  FIXED %.1f %.1f %.1f\n",paperTop,paperBottom,topLine);
 
 	     // Add the top sticky
 	    topSticky = TRUE;
-	    topStickyArea.x = FingerPressedAtX-28.0;
-	    topStickyArea.y = FingerPressedAtY-(STICKY_HIGH/2.0);
-	    topStickyArea.width = 50;
-	    topStickyArea.height = STICKY_HIGH;
-	    topStickyArea.topLine = topLine;
+	    topStickyArea = (Rectangle) {FingerPressedAtX-28.0,FingerPressedAtY-(STICKY_HIGH/2.0),
+					 50.0,STICKY_HIGH,topLine};
+	    /* topStickyArea.x = FingerPressedAtX-28.0; */
+	    /* topStickyArea.y = FingerPressedAtY-(STICKY_HIGH/2.0); */
+	    /* topStickyArea.width = 50; */
+	    /* topStickyArea.height = STICKY_HIGH; */
+	    /* topStickyArea.topLine = topLine; */
 
 	    {
 		gboolean wrapped = FALSE;
@@ -1519,9 +1463,9 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    (FingerPressedAtX >= PaperArea.x) &&
 	    (FingerPressedAtX <= PaperArea.x+PaperArea.width))
 	{
-	    gdouble topLine;
-	    topLine = peny - MIDDLE_LINE;
-	    wrapRange(topLine,DRUM_HIGH);
+	    //gdouble topLine;
+	    //topLine = peny - MIDDLE_LINE;
+	    //wrapRange(topLine,DRUM_HIGH);
 
 	    //  Set the paper area top line here now that it is fixed to the drum
 	    // Drum may have moved since it was dropped.
@@ -1620,11 +1564,13 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 	     // Add the bottom sticky
 	    bottomSticky = TRUE;
-	    bottomStickyArea.x = FingerPressedAtX-28;
-	    bottomStickyArea.y = FingerPressedAtY-(STICKY_HIGH/2.0);
-	    bottomStickyArea.width = 50;
-	    bottomStickyArea.height = STICKY_HIGH;
-	    bottomStickyArea.topLine = topLine;
+	    bottomStickyArea = (Rectangle) {FingerPressedAtX-28.0,FingerPressedAtY-(STICKY_HIGH/2.0),
+					 50.0,STICKY_HIGH,topLine};
+	    /* bottomStickyArea.x = FingerPressedAtX-28; */
+	    /* bottomStickyArea.y = FingerPressedAtY-(STICKY_HIGH/2.0); */
+	    /* bottomStickyArea.width = 50; */
+	    /* bottomStickyArea.height = STICKY_HIGH; */
+	    /* bottomStickyArea.topLine = topLine; */
 
 
 	    {
@@ -1695,9 +1641,9 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		  (PlotterPaperFSM.state == PLOTTER_TOP_FREE) )
 	)
     {
-	gdouble fingerX,fingerY,topLine;
-	topLine = peny - MIDDLE_LINE;
-	wrapRange(topLine,DRUM_HIGH);
+	gdouble fingerX,fingerY;//,topLine;
+	//topLine = peny - MIDDLE_LINE;
+	//wrapRange(topLine,DRUM_HIGH);
 	
 	
 	fingerX = FingerPressedAtX - DRAWABLE_DRUM_LEFT;
@@ -1758,9 +1704,9 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 
 	if(PlotterPaperFSM.state == PLOTTER_PLACED_PAPER)
 	{
-	    gdouble topLine;
-	    topLine = peny - MIDDLE_LINE;
-	    wrapRange(topLine,DRUM_HIGH);
+	    //gdouble topLine;
+	    //topLine = peny - MIDDLE_LINE;
+	    //wrapRange(topLine,DRUM_HIGH);
 	    
 	    updateVisibleSurface(FALSE,FALSE,FALSE);
 	    bottomStickyVisibleArea = topStickyVisibleArea = NULL;
@@ -1800,9 +1746,9 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 	knob = knobs;
 	for(int knobNumber = 0; knobNumber < knobCount; knobNumber += 1,knob++)
 	{
-	    left = knob->xpos;
+	    left = knob->left;
 	    right = left + knob->width;
-	    top = knob->ypos;
+	    top = knob->top;
 	    bottom = top + knob->height;
 
 	    if((FingerPressedAtX >= left) && (FingerPressedAtX <= right) &&
@@ -1880,9 +1826,10 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     int n,ix,iy;
     enum  handimages showingHand;
     gdouble hx,hy;
-    gdouble fingerX,fingerY,topLine;
+    gdouble fingerX,fingerY; //,topLine;
     gboolean overKnob = FALSE;
     gboolean overSticky = FALSE;
+    struct knobInfo *knob;
     
     //printf("%s called\n",__FUNCTION__);
 
@@ -1891,8 +1838,8 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     ix = (int) hx;
     iy = (int) hy;
 
-    topLine = peny - MIDDLE_LINE;
-    wrapRange(topLine,DRUM_HIGH);
+    //topLine = peny - MIDDLE_LINE;
+    //wrapRange(topLine,DRUM_HIGH);
 	
 	
     fingerX = hx - DRAWABLE_DRUM_LEFT;
@@ -1904,27 +1851,37 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     showingHand = movingHand->showingHand;
 
     // Over a knob ?
-    for(n=0;n<knobCount2;n++)
+    knob = knobs;
+    for(n=0;n<knobCount2;n++,knob++)
     {
-	if( (ix >= OneFingerAreas[n].x) &&
-	    (ix <= (OneFingerAreas[n].x+OneFingerAreas[n].width)) &&
-	    (iy >= OneFingerAreas[n].y) &&
-	    (iy <= (OneFingerAreas[n].y+OneFingerAreas[n].height)) )
+	if( (ix >= knob->left) && (ix <= knob->right) &&
+	    (iy >= knob->top)  && (iy <= knob->bottom))
+	/* if( (ix >= OneFingerAreas[n].x) && */
+	/*     (ix <= (OneFingerAreas[n].x+OneFingerAreas[n].width)) && */
+	/*     (iy >= OneFingerAreas[n].y) && */
+	/*     (iy <= (OneFingerAreas[n].y+OneFingerAreas[n].height)) ) */
 	{
 	    overKnob = TRUE;
 	    break;
 	}
     }
 
+
+
     // Over the sticky dispenser
-    if( (ix >= OneFingerAreas[stickyKnobNumber].x) &&
-	(ix <= (OneFingerAreas[stickyKnobNumber].x+OneFingerAreas[stickyKnobNumber].width)) &&
-	(iy >= OneFingerAreas[stickyKnobNumber].y) &&
-	(iy <= (OneFingerAreas[stickyKnobNumber].y+OneFingerAreas[stickyKnobNumber].height)) )
+    knob = &knobs[stickyKnobNumber];
+    if( (ix >= knob->left) && (ix <= knob->right) &&
+	(iy >= knob->top)  && (iy <= knob->bottom) )
+    
+    /* if( (ix >= OneFingerAreas[stickyKnobNumber].x) && */
+    /* 	(ix <= (OneFingerAreas[stickyKnobNumber].x+OneFingerAreas[stickyKnobNumber].width)) && */
+    /* 	(iy >= OneFingerAreas[stickyKnobNumber].y) && */
+    /* 	(iy <= (OneFingerAreas[stickyKnobNumber].y+OneFingerAreas[stickyKnobNumber].height)) ) */
     {
 	overSticky = TRUE;
     }
 
+    
     if( (bottomStickyVisibleArea != NULL) && (fingerX >= bottomStickyVisibleArea->left) &&
 	(fingerX <= (bottomStickyVisibleArea->right)))
     {
@@ -2018,12 +1975,14 @@ static void ClinesChanged(unsigned int value)
     CLines = value;
 }
 
-
+// Move the drum and update topLine
 static void yStep(gdouble dy)
 {
 
     peny += dy;
     wrapRange(peny,DRUM_HIGH);
+    topLine = peny - MIDDLE_LINE;
+    wrapRange(topLine,DRUM_HIGH);
 }
 
 static void xStep(gdouble dx)
@@ -2244,7 +2203,7 @@ static void squarePaperHandler(__attribute__((unused)) int state)
     //static Rectangle Paper = {0.0,0.0,400.0,340.0,0.0};
     //static Rectangle Paper = {0.0,0.0,400.0,621.0,0.0};
     HandInfo *trackingHand;
-    gdouble topLine,fx,fy; //,top,bottom;
+    gdouble fx,fy; //,top,bottom;
 //    gboolean wrapped = FALSE;
 
 
@@ -2257,8 +2216,8 @@ static void squarePaperHandler(__attribute__((unused)) int state)
 	Paper.height = gdk_pixbuf_get_height(paperSmall_pixbuf);
 	
 	trackingHand = getTrackingXY(&fx,&fy);
-	topLine = peny - MIDDLE_LINE;
-	wrapRange(topLine,DRUM_HIGH);
+	//topLine = peny - MIDDLE_LINE;
+	//wrapRange(topLine,DRUM_HIGH);
 
 	PaperArea = Paper;
 	
@@ -2285,6 +2244,10 @@ static void PaperBinHandler(__attribute__((unused)) int state)
 	doFSM(&PlotterPaperFSM,PLOTTER_DROP_PAPER,NULL);
 
 //	PaperArea = NULL;
+    }
+    else if(trackingHand->showingHand == HAND_STICKY_TAPE)
+    {
+	ConfigureHand(trackingHand,0.0,0.0,0,HAND_EMPTY);
     }
 }
 
@@ -2623,23 +2586,17 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     powerKnobNumber = knobNumber;
 
     knob->type = 1;
-    knob->xpos = 0;
-    knob->ypos = 253;
+    knob->left = 0;
+    knob->top = 253;
     knob->width = KNOB_WIDE;
     knob->height = KNOB_HIGH;
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
     knob->state = 0;
     knob->pixIds[0] = 4;  knob->pixIds[1] = -1;  knob->pixIds[2] = 5;
     knob->changed = FALSE;
     knob->wire = 0;
     knob->handler = powerKnobHandler;
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = knob->xpos;
-    switchArea->y = knob->ypos;	
-    switchArea->width = knob->width;
-    switchArea->height = knob->height;
-    switchArea->topLine =  0.0;
-    
 
     knobNumber += 1;
 
@@ -2648,22 +2605,17 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knob = &knobs[knobNumber];
     
     knob->type = 0;
-    knob->xpos = 0;
-    knob->ypos = 155;
+    knob->left = 0;
+    knob->top = 155;
     knob->width = KNOB_WIDE;
     knob->height = KNOB_HIGH;
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
     knob->state = 1;
     knob->pixIds[0] = 2;  knob->pixIds[1] = 3;  knob->pixIds[2] = 4;
     knob->changed = FALSE;
     knob->wire = 0;
 
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = knob->xpos;
-    switchArea->y = knob->ypos;	
-    switchArea->width = knob->width;
-    switchArea->height = knob->height;
-    switchArea->topLine =  0.0;
-    
     knob->handler = CarraigeFastKnobHandler;
 
     knobNumber += 1;
@@ -2673,21 +2625,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knob = &knobs[knobNumber];
     
     knob->type = 2;
-    knob->xpos = 0;
-    knob->ypos = 60;
+    knob->left = 0;
+    knob->top = 60;
     knob->width = KNOB_WIDE;
     knob->height = KNOB_HIGH;
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
     knob->state = 1;
     knob->pixIds[0] = 2;  knob->pixIds[1] = 3;  knob->pixIds[2] = 4;
     knob->changed = FALSE;
     knob->wire = 0;
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = knob->xpos;
-    switchArea->y = knob->ypos;	
-    switchArea->width = knob->width;
-    switchArea->height = knob->height;
-    switchArea->topLine =  0.0;
     
     knob->handler = carriageSingleKnobHandler;
 
@@ -2698,22 +2645,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knob = &knobs[knobNumber];
     
     knob->type = 2;
-    knob->xpos = 661;
-    knob->ypos = 60;
+    knob->left = 661;
+    knob->top = 60;
     knob->width = KNOB_WIDE;
     knob->height = KNOB_HIGH;
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
     knob->state = 1;
     knob->pixIds[0] = 0;  knob->pixIds[1] = 1;  knob->pixIds[2] = 2;
     knob->changed = FALSE;
     knob->wire = 0;
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = knob->xpos;
-    switchArea->y = knob->ypos;	
-    switchArea->width = knob->width;
-    switchArea->height = knob->height;
-    switchArea->topLine =  0.0;
-    
     knob->handler = drumSingleKnobHandler;
 
     knobNumber += 1;
@@ -2724,22 +2665,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knob = &knobs[knobNumber];
     
     knob->type = 0;
-    knob->xpos = 661;
-    knob->ypos = 155;
+    knob->left = 661;
+    knob->top = 155;
     knob->width = KNOB_WIDE;
     knob->height = KNOB_HIGH;
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
     knob->state = 1;
     knob->pixIds[0] = 0;  knob->pixIds[1] = 1;  knob->pixIds[2] = 2;
     knob->changed = FALSE;
     knob->wire = 0;
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = knob->xpos;
-    switchArea->y = knob->ypos;	
-    switchArea->width = knob->width;
-    switchArea->height = knob->height;
-    switchArea->topLine =  0.0;
-    
     knob->handler = DrumFastKnobHandler;
     knobNumber += 1;
 
@@ -2749,22 +2684,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knob = &knobs[knobNumber];
     
     knob->type = 2;
-    knob->xpos = 661;
-    knob->ypos = 253;
+    knob->left = 661;
+    knob->top = 253;
     knob->width = KNOB_WIDE;
     knob->height = KNOB_HIGH;
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
     knob->state = 1;
     knob->pixIds[0] = 0;  knob->pixIds[1] = 1;  knob->pixIds[2] = 2;
     knob->changed = FALSE;
     knob->wire = 0;
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = knob->xpos;
-    switchArea->y = knob->ypos;	
-    switchArea->width = knob->width;
-    switchArea->height = knob->height;
-    switchArea->topLine =  0.0;
-    
     knob->handler = penUpDownHandler;
     
     knobNumber += 1;
@@ -2775,22 +2704,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     manualKnobNumber = knobNumber;
     
     knob->type = 3;    // Press-press Toggle switch
-    knob->xpos = 285;
-    knob->ypos = 372;
+    knob->left = 285;
+    knob->top = 372;
     knob->width = 48;
-    knob->height = 35;
+    knob->height = 35;    
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
     knob->state = 0;
     knob->pixIds[0] = 0;  knob->pixIds[1] = 1;  knob->pixIds[2] = 2;
     knob->changed = FALSE;
     knob->wire = 0;
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = knob->xpos;
-    switchArea->y = knob->ypos;	
-    switchArea->width = knob->width;
-    switchArea->height = knob->height;
-    switchArea->topLine =  0.0;
-    
     knob->handler = manualHandler;
     
     knobNumber += 1;
@@ -2800,12 +2723,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     /* Square Paper Area */
 
     knob = &knobs[knobNumber];
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = 584;
-    switchArea->y = 378;	
-    switchArea->width = 90;
-    switchArea->height = 90;
+    knob->type = 4;
+    knob->left = 584;
+    knob->top = 378;
+    knob->width = 90;
+    knob->height = 90;    
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
+    knob->state = 0;
+    knob->changed = FALSE;
+    knob->wire = 0;
     knob->handler = squarePaperHandler;
 
     knobNumber += 1;
@@ -2815,12 +2742,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     /* Paper Bin */
     
     knob = &knobs[knobNumber];
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = 371;
-    switchArea->y = 422;	
-    switchArea->width = 50;
-    switchArea->height = 56;
+    knob->type = 4;
+    knob->left = 371;
+    knob->top = 422;
+    knob->width = 50;
+    knob->height = 56;    
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
+    knob->state = 0;
+    knob->changed = FALSE;
+    knob->wire = 0;
     knob->handler = PaperBinHandler;
 
     knobNumber += 1;
@@ -2828,12 +2759,16 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
      /* Paper Folder */
     
     knob = &knobs[knobNumber];
-
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = 306;
-    switchArea->y = 422;	
-    switchArea->width = 60;
-    switchArea->height = 56;
+    knob->type = 4;
+    knob->left = 306;
+    knob->top = 422;
+    knob->width = 60;
+    knob->height = 56;    
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
+    knob->state = 0;
+    knob->changed = FALSE;
+    knob->wire = 0;
     knob->handler = PaperFolderHandler;
 
     knobNumber += 1   
@@ -2845,30 +2780,28 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     /* Sticky tape area  */
         
     knob = &knobs[knobNumber];
+    knob->type = 4;
+    knob->left = 477;
+    knob->top = 424;
+    knob->width = 38;
+    knob->height = 29;    
+    knob->right = knob->left + knob->width;
+    knob->bottom = knob->top + knob->height;
+    knob->state = 0;
+    knob->changed = FALSE;
+    knob->wire = 0;
     stickyKnobNumber = knobNumber;
-    
-    switchArea = &OneFingerAreas[knobNumber];
-    switchArea->x = 477;
-    switchArea->y = 424;	
-    switchArea->width = 38;
-    switchArea->height = 29;
-    switchArea->topLine =  0.0;
-    
-    //knob->handler = stickyTapeHandler;   // Not called
-
     knobNumber += 1;
 
-    
-   
-    
-
     penx = 0.0;
-    //PenY = (PAPER_TOP+PAPER_HIGH);    // 1660 puts pen at 830
     peny =  0.0;
+
+    // Set inital value for topLine
+    topLine = peny - MIDDLE_LINE;
+    wrapRange(topLine,DRUM_HIGH);
+
+
     PenDown = TRUE;
-
-
-    
     
     connectWires(F72, F72changed);
     connectWires(ACT, ACTchanged);
@@ -2885,14 +2818,10 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     {
 	cairo_surface_t *paperSurface = NULL;
 	int w,h;
-
-
 	
 	g_string_printf(fileName,"%sPaper.png",userPath->str);
 	paper_pixbuf =
 	    gdk_pixbuf_new_from_file(fileName->str,NULL);
-	
-
 
 	// Check pixbuf is the right size.
 	h = gdk_pixbuf_get_height(paper_pixbuf);
@@ -2906,7 +2835,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
 	// THis is the full resolution version so double the dimenstions
 	paperSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,w,h);
-	// 2*PaperArea.width,2*PaperArea.height);
+
 
 	paperSurfaceCr = cairo_create(paperSurface);
 	gdk_cairo_set_source_pixbuf (paperSurfaceCr, paper_pixbuf ,0.0,0.0);
@@ -2923,9 +2852,4 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     fileName = NULL;
     
     gtk_widget_show(PlotterWindow);
-
-
-
-
-
 }
