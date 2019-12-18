@@ -105,6 +105,9 @@ static struct knobInfo
 } knobs[20];     /* There are six knobs and one button on the Plotter */
                  /* Plus three paper areas */
 
+struct knobInfo *activeKnob = NULL;
+
+
 // penx and peny are full resolution but half sized so steps will be
 // +/- 0.5 
 static gdouble penx,peny;    // For half resolution image
@@ -180,24 +183,23 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
 
 
 enum PlotterStates {PLOTTER_NO_PAPER,PLOTTER_HOLDING_PAPER,PLOTTER_PLACED_PAPER,
-		    PLOTTER_BOTTOM_FIXED,
-		    PLOTTER_BOTH_FIXED,PLOTTER_TOP_FIXED,PLOTTER_STICKY3,PLOTTER_TOP_FREE,
-		    PLOTTER_BOTTOM_FREE,PLOTTER_BOTH_FREE,PLOTTER_POSITIONING2,PLOTTER_PAPER_REMOVED};
+		    PLOTTER_BOTTOM_FIXED,PLOTTER_TOP_FIXED,
+		    PLOTTER_BOTH_FIXED};
 
 const char *PlotterStateNames[] =
-{"PLOTTER_NO_PAPER","PLOTTER_HOLDING_PAPER","PLOTTER_PLACED_PAPER",
- "PLOTTER_BOTTOM_FIXED",
- "PLOTTER_BOTH_FIXED","PLOTTER_TOP_FIXED","PLOTTER_STICKY3","PLOTTER_TOP_FREE",
- "PLOTTER_BOTTOM_FREE","PLOTTER_BOTH_FREE","PLOTTER_POSITIONING2","PLOTTER_PARER_REMOVED"};
+{
+"PLOTTER_NO_PAPER","PLOTTER_HOLDING_PAPER","PLOTTER_PLACED_PAPER",
+"PLOTTER_BOTTOM_FIXED","PLOTTER_TOP_FIXED",
+"PLOTTER_BOTH_FIXED"};
 
 
-enum PlotterEvents {PLOTTER_PRESS_NEW_PAPER,PLOTTER_PLACE_PAPER,PLOTTER_PAPER_PRESS,
+enum PlotterEvents {PLOTTER_PRESS_NEW_PAPER,PLOTTER_PLACE_PAPER,
 		    PLOTTER_FIX_BOTTOM_EDGE,PLOTTER_FIX_TOP_EDGE,
 		    PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_PRESS_TOP_STICKY,
 		    PLOTTER_PICKUP_PAPER,PLOTTER_DROP_PAPER};
 
 const char *PlotterEventNames[] =
-{"PLOTTER_PRESS_NEW_PAPER", "PLOTTER_PLACE_PAPER","PLOTTER_PAPER_PRESS",
+{"PLOTTER_PRESS_NEW_PAPER","PLOTTER_PLACE_PAPER",
  "PLOTTER_FIX_BOTTOM_EDGE","PLOTTER_FIX_TOP_EDGE",
  "PLOTTER_PRESS_BOTTOM_STICKY","PLOTTER_PRESS_TOP_STICKY",
  "PLOTTER_PICKUP_PAPER","PLOTTER_DROP_PAPER"};
@@ -213,18 +215,19 @@ struct fsmtable PlotterPaperTable[] = {
 
     {PLOTTER_PLACED_PAPER,     PLOTTER_PICKUP_PAPER,       PLOTTER_HOLDING_PAPER,     NULL},
     {PLOTTER_PLACED_PAPER,     PLOTTER_FIX_BOTTOM_EDGE,    PLOTTER_BOTTOM_FIXED,      NULL},
+    {PLOTTER_PLACED_PAPER,     PLOTTER_FIX_TOP_EDGE,       PLOTTER_TOP_FIXED,         NULL},
 
     {PLOTTER_BOTTOM_FIXED,     PLOTTER_FIX_TOP_EDGE,       PLOTTER_BOTH_FIXED,        NULL},
     {PLOTTER_BOTTOM_FIXED,     PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_PLACED_PAPER,      NULL},
-     
-    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_BOTTOM_FREE,       NULL},
-    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_TOP_STICKY,   PLOTTER_TOP_FREE,          NULL},
 
-    {PLOTTER_BOTTOM_FREE,      PLOTTER_PRESS_TOP_STICKY,   PLOTTER_PLACED_PAPER,      NULL},
-    {PLOTTER_BOTTOM_FREE,      PLOTTER_FIX_BOTTOM_EDGE,    PLOTTER_BOTH_FIXED,        NULL},
+    {PLOTTER_TOP_FIXED,        PLOTTER_PRESS_TOP_STICKY,   PLOTTER_PLACED_PAPER,      NULL},
+    {PLOTTER_TOP_FIXED,        PLOTTER_FIX_BOTTOM_EDGE,    PLOTTER_BOTH_FIXED,        NULL},
     
-    {PLOTTER_TOP_FREE,         PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_PLACED_PAPER,      NULL},
-    {PLOTTER_TOP_FREE,         PLOTTER_FIX_TOP_EDGE,       PLOTTER_BOTH_FIXED,        NULL},
+    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_TOP_FIXED,         NULL},
+    {PLOTTER_BOTH_FIXED,       PLOTTER_PRESS_TOP_STICKY,   PLOTTER_BOTTOM_FIXED,       NULL},
+
+
+    
     
     {-1,-1,-1,NULL}
 };
@@ -720,8 +723,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 
     // Draw paper controlled by new state based wrapping algorithm
 
-    if( (PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED) ||
-	(PlotterPaperFSM.state == PLOTTER_TOP_FREE) )
+    if( (PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED)) //||
+	//(PlotterPaperFSM.state == PLOTTER_TOP_FREE) )
     {   // Clipping is set up so that bottom sticky is drawn correctly at the top and bottom
 	cairo_save(cr);
 
@@ -1212,10 +1215,135 @@ void updateVisibleSurface(gboolean showPaper,
     
 }    
 
-
+// New version 
 __attribute__((used))
 gboolean
 on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *drawingArea,
+					 __attribute__((unused)) GdkEventButton *event,
+					 __attribute__((unused)) gpointer data)
+{
+    HandInfo *trackingHand;
+    
+    // Right mouse button click swaps over the active hand.
+    if(event->button == 3)
+    {
+	swapHands(drawingArea);
+	return GDK_EVENT_STOP;
+    }
+
+    trackingHand = updateHands(event->x,event->y,&FingerPressedAtX,&FingerPressedAtY);
+    if(trackingHand != NULL)
+    {
+	if(activeKnob != NULL)
+	{
+	    switch(activeKnob->type)
+	    {
+	    case 0:
+	    case 2:
+		if((FingerPressedAtX - activeKnob->left) >= (activeKnob->width/2))
+		{
+		    if(activeKnob->state < 2) activeKnob->state += 1;
+		    //g_info("Right Hit button number %d %d ",activeKnobNumber,activeKnob->state);
+		}
+		else
+		{
+		    if(activeKnob->state > 0) activeKnob->state -= 1;
+		    //g_info("Left  Hit button number %d %d",activeKnobNumber,activeKnob->state);
+		}
+		activeKnob->changed = TRUE;
+		break;
+	    case 1:
+		if((FingerPressedAtX - activeKnob->left) >= (activeKnob->width/2))
+		{
+		    if(activeKnob->state < 2) activeKnob->state = 2;
+		    //g_info("Right Hit button number %d %d ",activeKnobNumber,activeKnob->state);
+		}
+		else
+		{
+		    if(activeKnob->state > 0) activeKnob->state = 0;
+		    //g_info("Left  Hit button number %d %d",activeKnobNumber,activeKnob->state);
+		}
+		activeKnob->changed = TRUE;
+		break;
+	    case 3:
+		switch(activeKnob->state)
+		{
+		case 0:
+		    activeKnob->state = 1;
+
+		    break;
+		case 1:
+		    activeKnob->state = 2;
+		default:
+		    break;
+		}
+		break;
+	    case 4:
+		break;
+	    default:
+		break;
+	    }
+	    if(activeKnob->handler != NULL) (activeKnob->handler)(activeKnob->state);
+
+	}
+
+    }
+
+    return GDK_EVENT_STOP;
+}
+
+__attribute__((used))
+gboolean
+on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *drawingArea,
+					   __attribute__((unused)) GdkEventButton *event,
+					   __attribute__((unused)) gpointer data)
+{
+    HandInfo *trackingHand;
+
+    if(event->button == 3)
+    {
+	return GDK_EVENT_STOP;
+    }
+
+    trackingHand = updateHands(event->x,event->y,&FingerPressedAtX,&FingerPressedAtY);
+
+    if(activeKnob != NULL)
+    {
+	switch(activeKnob->type)
+	{
+	case 2:
+	    activeKnob->state = 1;
+	    activeKnob->changed = TRUE;
+	    break;
+	case 3:
+		    
+	    switch(activeKnob->state)
+	    {
+	    case 2:
+		activeKnob->state = 0;
+		activeKnob->changed = TRUE;
+		break;
+	    default:
+		break;
+	    }
+	    break;
+	default:
+	    break;
+	}
+	if((activeKnob->changed) && (activeKnob->handler != NULL)) (activeKnob->handler)(activeKnob->state);
+    }
+    // Always release the finger (even if not over a button).
+    if(trackingHand != NULL) trackingHand->FingersPressed &= ~trackingHand->IndexFingerBit;
+
+    
+    return GDK_EVENT_STOP;
+}
+
+#if 0
+// Old version
+__attribute__((used))
+gboolean
+on_PlotterDrawingArea_button_press_event_OLD(__attribute__((unused)) GtkWidget *drawingArea,
 					 __attribute__((unused)) GdkEventButton *event,
 					 __attribute__((unused)) gpointer data)
 {
@@ -1231,7 +1359,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	swapHands(drawingArea);
 	return GDK_EVENT_STOP;
     }
-
     
     trackingHand = updateHands(event->x,event->y,&FingerPressedAtX,&FingerPressedAtY);
     if(trackingHand != NULL)
@@ -1255,10 +1382,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		if(knob->handler != NULL) (knob->handler)(knob->state);
 	    }
 	}
-
-
-
-
 	
 	// Check for all the things that can be pointed at with one finger 
 	if( trackingHand->showingHand == HAND_ONE_FINGER  )
@@ -1324,8 +1447,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    }
 	}
 
-	
-
 	//else if(PlotterPaperFSM.state == PLOTTER_HOLDING_PAPER)
 	if( trackingHand->showingHand == HAND_HOLDING_PAPER  )
 	{
@@ -1369,16 +1490,13 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		topStickyArea = (Rectangle) {FingerPressedAtX-28.0,FingerPressedAtY-(STICKY_HIGH/2.0),
 					     50.0,STICKY_HIGH,topLine};
 
-
 		{
 		    gboolean wrapped = FALSE;
-
 
 		    bottom = topLine +  (FingerPressedAtY - DRUM_TOP) +(STICKY_HIGH/2.0); 
 		    top    = topLine + (FingerPressedAtY - DRUM_TOP) -(STICKY_HIGH/2.0); 
 		    wrapRange(stickyBottom,DRUM_HIGH);
 		    wrapRange(stickyTop,DRUM_HIGH);
-
 
 		    if(top > bottom)
 		    {
@@ -1388,8 +1506,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 			bottom = t;
 			wrapped = TRUE;
 		    }
-		    
-	
 		
 		    static VisibleArea sticky;
 
@@ -1406,7 +1522,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		trackingHand->showingHand = HAND_EMPTY;
 		justDroppedSticky = TRUE;
 	    }
-
 
 	}
 	if( (trackingHand->showingHand == HAND_EMPTY) &&
@@ -1429,12 +1544,9 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		trackingHand = getTrackingXY(&FingerPressedAtX,&FingerPressedAtY);
 		handHoldingPaper = trackingHand;
 		ConfigureHand(trackingHand,0.0,0.0,0,HAND_HOLDING_PAPER);
-
-
 	    
 		doFSM(&PlotterPaperFSM,PLOTTER_PICKUP_PAPER,NULL);
 		//trackingHand->showingHand = HAND_HOLDING_PAPER;	    
-
 	    }
 	}
 	if( (trackingHand->showingHand == HAND_STICKY_TAPE) &&
@@ -1523,7 +1635,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 			g_debug("Starting in state %d showingPaper %d\n",wrappingFsmState,showingPaper);
 
 		    }
-
 		
 		    paperBottom = initialDrop;
 		    paperTop = paperBottom - PaperArea.height;
@@ -1534,8 +1645,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		    stickyTop    = (FingerPressedAtY - DRUM_TOP) -(STICKY_HIGH/2.0); 
 		    wrapRange(stickyBottom,DRUM_HIGH);
 		    wrapRange(stickyTop,DRUM_HIGH);
-		
-
 		}
 
 		// Add the bottom sticky
@@ -1596,7 +1705,6 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		    PaperVisibleArea = pva;
 		}
 	    }
-
 	}
 
 	if(  (PlotterPaperFSM.state == PLOTTER_BOTH_FIXED) ||
@@ -1662,11 +1770,14 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
     }
     return GDK_EVENT_STOP;
 }
+#endif
 
 
+
+#if 0
 __attribute__((used))
 gboolean
-on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *drawingArea,
+on_PlotterDrawingArea_button_release_event_OLD(__attribute__((unused)) GtkWidget *drawingArea,
 					   __attribute__((unused)) GdkEventButton *event,
 					   __attribute__((unused)) gpointer data)
 {
@@ -1731,7 +1842,7 @@ on_PlotterDrawingArea_button_release_event(__attribute__((unused)) GtkWidget *dr
     
     return GDK_EVENT_STOP;
 }
-
+#endif
 
 
 
@@ -1763,7 +1874,7 @@ void warpToFinger(GdkWindow *win,HandInfo *hand)
 static void on_Hand_motion_event(HandInfo *movingHand)
 {
 
-    int n,ix,iy;
+    int n,ix,iy,activeKnobNumber;
     enum  handimages showingHand;
     gdouble hx,hy;
     gdouble fingerX,fingerY;
@@ -1784,21 +1895,22 @@ static void on_Hand_motion_event(HandInfo *movingHand)
     showingHand = movingHand->showingHand;
 
     // Over a knob ?
+    activeKnob = NULL;
     knob = knobs;
-    for(n=0;n<knobCount2;n++,knob++)
+    for(n=0;n<knobCount;n++,knob++)
     {
 	if( (ix >= knob->left) && (ix <= knob->right) &&
 	    (iy >= knob->top)  && (iy <= knob->bottom))
 	{
 	    overKnob = TRUE;
+	    activeKnobNumber = n;
+	    activeKnob = knob;
 	    break;
 	}
     }
 
     // Over the sticky dispenser
-    knob = &knobs[stickyKnobNumber];
-    if( (ix >= knob->left) && (ix <= knob->right) &&
-	(iy >= knob->top)  && (iy <= knob->bottom) )
+    if(overKnob && (activeKnobNumber == stickyKnobNumber))
     {
 	overSticky = TRUE;
     }
@@ -1843,20 +1955,19 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	}
     }
 #endif
-
-
-
     
     if(showingHand == HAND_EMPTY)
     {
-	if(overKnob)
-	{
-	    showingHand = HAND_ONE_FINGER;
-	}
 	if(overSticky)
 	{
 	    showingHand = HAND_GRABBING;
 	}
+	// Type 4 knobs are not one figer areas
+	else if( (overKnob) && (activeKnob->type != 4))
+	{
+	    showingHand = HAND_ONE_FINGER;
+	}
+
     }
     else
     {
@@ -2646,6 +2757,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     /* Manual */
 
     knob = &knobs[knobNumber];
+    // manualKnobNumber is used to get/set the manual button state when init/tidy.  
     manualKnobNumber = knobNumber;
     
     knob->type = 3;    // Press-press Toggle switch
@@ -2663,7 +2775,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     
     knobNumber += 1;
 
-    knobCount = knobNumber;
+  
 
     /* Square Paper Area */
 
@@ -2717,13 +2829,13 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     knob->wire = 0;
     knob->handler = PaperFolderHandler;
 
-    knobNumber += 1   
+    knobNumber += 1;   
 #endif
-knobCount2 = knobNumber;
+    //knobCount2 = knobNumber;
     
     
      
-	/* Sticky tape area  */
+    /* Sticky tape area  */
         
 	knob = &knobs[knobNumber];
     knob->type = 4;
@@ -2736,8 +2848,11 @@ knobCount2 = knobNumber;
     knob->state = 0;
     knob->changed = FALSE;
     knob->wire = 0;
+    // stickyKnobNumber is used to change the hand to grabbing when over the dispenser.
     stickyKnobNumber = knobNumber;
     knobNumber += 1;
+
+    knobCount = knobNumber;    
 
     penx = 0.0;
     peny =  0.0;
