@@ -950,6 +950,13 @@ void swapHands(GtkWidget *drawingArea)
     
     //printf("%s called\n",__FUNCTION__);
 
+    // Swapping away from a grabbing hand makes the hand go to empty
+    if((LeftHandInfo.Fsm->state == TRACKING_HAND) && (LeftHandInfo.showingHand == HAND_GRABBING))
+	LeftHandInfo.showingHand = HAND_EMPTY;
+    if((RightHandInfo.Fsm->state == TRACKING_HAND) && (RightHandInfo.showingHand == HAND_GRABBING))
+	RightHandInfo.showingHand = HAND_EMPTY;
+    
+    
     t = LeftHandInfo.Fsm->state;
     LeftHandInfo.Fsm->state = RightHandInfo.Fsm->state;
     RightHandInfo.Fsm->state = t;
