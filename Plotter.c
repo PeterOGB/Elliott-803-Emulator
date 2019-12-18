@@ -1625,7 +1625,7 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 		    // Redraw visible surface and invalidate visible areas if stickies are removed
 		    if(PlotterPaperFSM.state == PLOTTER_BOTH_FIXED)
 		    {
-			updateVisibleSurface(TRUE,TRUE,FALSE);
+			updateVisibleSurface(TRUE,TRUE,TRUE);
 			bottomStickyVisibleArea = NULL;
 		    }
 		    if(PlotterPaperFSM.state == PLOTTER_PLACED_PAPER)
@@ -1803,17 +1803,50 @@ static void on_Hand_motion_event(HandInfo *movingHand)
 	overSticky = TRUE;
     }
 
-#if 1    
+    //g_debug("%p %p\n",bottomStickyVisibleArea,topStickyVisibleArea);
+    
+#if 1
+    /* if(bottomStickyVisibleArea != NULL) */
+    /* 	g_debug("BOT (%.1f,%.1f) (%.1f,%.1f) (%.1f,%.1f) %s\n",fingerX,fingerY, */
+    /* 		bottomStickyVisibleArea->left,bottomStickyVisibleArea->bottom, */
+    /* 		bottomStickyVisibleArea->right,bottomStickyVisibleArea->bottom, */
+    /* 		bottomStickyVisibleArea->wrapped ? "Wrapped":"Not Wrapped"); */
+    
     if( (bottomStickyVisibleArea != NULL) && (fingerX >= bottomStickyVisibleArea->left) &&
 	(fingerX <= (bottomStickyVisibleArea->right)))
     {
 	if(bottomStickyVisibleArea->wrapped != (	(fingerY > bottomStickyVisibleArea->top) &&
 							(fingerY <= (bottomStickyVisibleArea->bottom)) ) )
 	{
+	    g_debug("BOTOVER STICKY SET \n");
 	    overSticky = TRUE;
 	}
     }
-#endif      
+#endif
+
+#if 1
+
+    /* if(topStickyVisibleArea != NULL) */
+    /* 	g_debug("TOP (%.1f,%.1f) (%.1f,%.1f) (%.1f,%.1f) %s\n",fingerX,fingerY, */
+    /* 		topStickyVisibleArea->left,topStickyVisibleArea->top, */
+    /* 		topStickyVisibleArea->right,topStickyVisibleArea->bottom, */
+    /* 		topStickyVisibleArea->wrapped ? "Wrapped":"Not Wrapped"); */
+    
+    if( (topStickyVisibleArea != NULL) && (fingerX >= topStickyVisibleArea->left) &&
+	(fingerX <= (topStickyVisibleArea->right)))
+    {
+	if(topStickyVisibleArea->wrapped != (	(fingerY > topStickyVisibleArea->top) &&
+							(fingerY <= (topStickyVisibleArea->bottom)) ) )
+	{
+	    g_debug("TOP OVER STICKY SET\n");
+	    overSticky = TRUE;
+	}
+    }
+#endif
+
+
+
+    
     if(showingHand == HAND_EMPTY)
     {
 	if(overKnob)
