@@ -396,6 +396,7 @@ PlacePaperHandler(__attribute__((unused)) int s,
     
     modf(FingerPressedAtY - PaperArea.height,&PaperArea.y);
 
+    handHoldingPaper = NULL;
 
     return -1;
 }
@@ -409,13 +410,13 @@ PickupPaperHandler(__attribute__((unused)) int s,
 
     handHoldingPaper = trackingHand;
     ConfigureHand(trackingHand,0.0,0.0,0,HAND_HOLDING_PAPER);
+    
 
     return -1;
 }
 
-
 static int
-FixBottomEdgeHandler(__attribute__((unused)) int s,
+FixBottomEdgeFirstHandler(__attribute__((unused)) int s,
 		  __attribute__((unused)) int e,
 		  __attribute__((unused)) void *p)
 {
@@ -518,6 +519,135 @@ FixBottomEdgeHandler(__attribute__((unused)) int s,
 			     bottom,
 			     wrapped,FALSE};
     bottomStickyVisibleArea = &sticky;
+
+    wrapped = FALSE;
+
+    top = PaperArea.y - DRUM_TOP + topLine;
+    bottom = top + PaperArea.height;
+    wrapRange(bottom,DRUM_HIGH);
+    wrapRange(top,DRUM_HIGH);
+		
+    if(top > bottom)
+    {
+	gdouble t;
+	t = top;
+	top = bottom;
+	bottom = t;
+	wrapped = TRUE;
+    }
+
+    PaperVisibleArea = (VisibleArea) {PaperArea.x-DRAWABLE_DRUM_LEFT,
+		       top,
+		       PaperArea.x-DRAWABLE_DRUM_LEFT+PaperArea.width,
+		       bottom,
+		       wrapped,FALSE};
+    return -1;
+}
+
+static int
+FixTopEdgeFirstHandler(__attribute__((unused)) int s,
+		  __attribute__((unused)) int e,
+		  __attribute__((unused)) void *p)
+{
+    HandInfo *trackingHand = (HandInfo *) p;
+    int paperSize;
+    gboolean wrapped = FALSE;
+    static VisibleArea sticky;
+    gdouble top,bottom;
+    
+    //  Set the paper area top line here now that it is fixed to the drum
+    // Drum may have moved since it was dropped.
+    PaperArea.topLine = topLine;
+    // Goto HAND_GRABBING because hand is over sticky
+    ConfigureHand(trackingHand,0.0,0.0,0,HAND_GRABBING);
+
+    // Setup the paper wrapping
+
+    wrappingFsm = NULL;
+    wrappingFsmState = 0;
+
+    // initialDrop is set from the position that the paper was dropped at. 
+    initialDrop = (PaperArea.y+PaperArea.height) - DRUM_TOP;
+
+    // TO DO  Check these comparisons (some should be <= not <
+    if(PaperArea.height < initialDrop)
+    {
+	paperSize = 1;
+	wrappingFsm = wrappingTableA;
+    }
+    else if( (initialDrop<PaperArea.height) && (PaperArea.height<initialDrop+DRUM_TOP) )
+    {
+	paperSize = 2;
+	wrappingFsm = wrappingTableB;
+    }
+    else if( (initialDrop+DRUM_TOP<PaperArea.height) && (PaperArea.height<LINES_VISIBLE) )
+    {
+	paperSize = 3;
+	wrappingFsm = wrappingTableC;
+    }
+    else if( (LINES_VISIBLE<PaperArea.height) && (PaperArea.height<LINES_VISIBLE+DRUM_TOP) )
+    {
+	paperSize = 4;
+	wrappingFsm = wrappingTableD;
+		    
+    }
+    else if( (LINES_VISIBLE+DRUM_TOP<PaperArea.height) && (PaperArea.height<DRUM_HIGH-LINES_VISIBLE) )
+    {
+	paperSize = 5;
+	wrappingFsm = wrappingTableE;
+    }
+    else if(DRUM_HIGH-LINES_VISIBLE<PaperArea.height)
+    {
+	paperSize = 6;
+	wrappingFsm = wrappingTableF;
+    }
+    else
+    {
+	paperSize = 0;		    
+
+    }
+    g_debug("Papersize = %d %c\n",paperSize,0x40+paperSize);
+
+    if(wrappingFsm != NULL)
+    {
+	doWrappingFsm(ID,TRUE);
+	g_debug("Starting in state %d showingPaper %d\n",wrappingFsmState,showingPaper);
+
+    }
+    paperBottom = initialDrop;
+    paperTop = paperBottom - PaperArea.height;
+    wrapRange(paperTop,DRUM_HIGH);
+
+    // Sticky position is set by the press position not the paper position
+    stickyBottom = (FingerPressedAtY - DRUM_TOP) +(STICKY_HIGH/2.0); 
+    stickyTop    = (FingerPressedAtY - DRUM_TOP) -(STICKY_HIGH/2.0); 
+    wrapRange(stickyBottom,DRUM_HIGH);
+    wrapRange(stickyTop,DRUM_HIGH);
+
+    topStickyArea = (Rectangle) {FingerPressedAtX-28.0,FingerPressedAtY-(STICKY_HIGH/2.0),
+				50.0,STICKY_HIGH,topLine};
+
+    top = stickyTop + topLine;
+    bottom = stickyBottom + topLine;
+    wrapRange(bottom,DRUM_HIGH);
+    wrapRange(top,DRUM_HIGH);
+    wrapped = FALSE;
+		
+    if(top > bottom)
+    {
+	gdouble t;
+	t = top;
+	top = bottom;
+	bottom = t;
+	wrapped = TRUE;
+    }
+    
+    sticky =  (VisibleArea) {topStickyArea.x-DRAWABLE_DRUM_LEFT,
+			     top,
+			     topStickyArea.x-DRAWABLE_DRUM_LEFT+topStickyArea.width,
+			     bottom,
+			     wrapped,FALSE};
+    topStickyVisibleArea = &sticky;
 
     wrapped = FALSE;
 
@@ -650,8 +780,8 @@ struct fsmtable PlotterPaperTable[] = {
     {PLOTTER_HOLDING_PAPER,    PLOTTER_DROP_PAPER,         PLOTTER_NO_PAPER,          NULL},
 
     {PLOTTER_PLACED_PAPER,     PLOTTER_PICKUP_PAPER,       PLOTTER_HOLDING_PAPER,     PickupPaperHandler},
-    {PLOTTER_PLACED_PAPER,     PLOTTER_FIX_BOTTOM_EDGE,    PLOTTER_BOTTOM_FIXED,      FixBottomEdgeHandler},
-    {PLOTTER_PLACED_PAPER,     PLOTTER_FIX_TOP_EDGE,       PLOTTER_TOP_FIXED,         NULL},
+    {PLOTTER_PLACED_PAPER,     PLOTTER_FIX_BOTTOM_EDGE,    PLOTTER_BOTTOM_FIXED,      FixBottomEdgeFirstHandler},
+    {PLOTTER_PLACED_PAPER,     PLOTTER_FIX_TOP_EDGE,       PLOTTER_TOP_FIXED,         FixTopEdgeFirstHandler},
 
     {PLOTTER_BOTTOM_FIXED,     PLOTTER_FIX_TOP_EDGE,       PLOTTER_BOTH_FIXED,        FixTopEdgeHandler},
     {PLOTTER_BOTTOM_FIXED,     PLOTTER_PRESS_BOTTOM_STICKY,PLOTTER_PLACED_PAPER,      PaperFreeHandler},
@@ -1148,8 +1278,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 
     // Draw paper controlled by new state based wrapping algorithm
 
-    if( (PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED)) //||
-	//(PlotterPaperFSM.state == PLOTTER_TOP_FREE) )
+    if( (PlotterPaperFSM.state == PLOTTER_BOTTOM_FIXED) ||
+	(PlotterPaperFSM.state == PLOTTER_TOP_FIXED) )
     {   // Clipping is set up so that bottom sticky is drawn correctly at the top and bottom
 	cairo_save(cr);
 
@@ -1554,8 +1684,8 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	}
 	
 	
-	// Check paper corners
-	else if((FingerPressedAtY < 150.0) &&
+	// Check paper corners if not holding paper
+	else if((FingerPressedAtY < 150.0) && (handHoldingPaper == NULL) && 
 		 ( fabs(FingerPressedAtY - (PaperArea.y+PaperArea.height)) < 7.0) &&
 		 ( ( (trackingHand == &LeftHandInfo)  &&
 		     (FingerPressedAtX >= PaperArea.x) &&
@@ -1571,14 +1701,16 @@ on_PlotterDrawingArea_button_press_event(__attribute__((unused)) GtkWidget *draw
 	    
 	}
 	// Check for top or bottom edges
-	else if((FingerPressedAtY < 150.0) && (fabs(FingerPressedAtY-DRUM_TOP - paperTop) < 7.0) &&
+	else if((handHoldingPaper == NULL) && (FingerPressedAtY < 150.0) &&
+		(fabs(FingerPressedAtY-DRUM_TOP - paperTop) < 7.0) &&
 		(FingerPressedAtX >= PaperArea.x) &&
 		(FingerPressedAtX <= PaperArea.x+PaperArea.width))
 	{
 	    if(trackingHand->showingHand == HAND_STICKY_TAPE)
 		doFSM(&PlotterPaperFSM,PLOTTER_FIX_TOP_EDGE,(void *) trackingHand);
 	}
-	else if((FingerPressedAtY < 150.0) && (fabs(FingerPressedAtY - (PaperArea.y+PaperArea.height)) < 7.0) &&
+	else if((handHoldingPaper == NULL) && (FingerPressedAtY < 150.0) &&
+		(fabs(FingerPressedAtY - (PaperArea.y+PaperArea.height)) < 7.0) &&
 		 (FingerPressedAtX >= PaperArea.x) &&
 		 (FingerPressedAtX <= PaperArea.x+PaperArea.width))
 	{
