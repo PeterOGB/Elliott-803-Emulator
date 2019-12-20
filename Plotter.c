@@ -120,7 +120,7 @@ static cairo_t *visibleSurfaceCr = NULL;
 static Rectangle *PaperArea = NULL; 
 static VisibleArea PaperVisibleArea = {0.0,0.0,0.0,0.0,FALSE,FALSE};  // Should be pointer ?
 static gboolean PaperLoaded = FALSE;
-static cairo_t *paperSurfaceCr = NULL;
+//static cairo_t *paperSurfaceCr = NULL;
 static cairo_t *drumSurfaceCr = NULL;
 static int wrappingFsmState = 0;
 static int showingPaper = 0;
@@ -1275,9 +1275,7 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
     static cairo_t *backgroundSurfaceCr = NULL;
     static cairo_surface_t *visibleSurface = NULL;
     static cairo_surface_t *carriageSurface = NULL;
-    //static cairo_surface_t *drumSurface = NULL;
     static cairo_t *carriageSurfaceCr = NULL;
-    //static cairo_t *drumSurfaceCr = NULL;
     GtkAllocation  DrawingAreaAlloc;
     struct knobInfo *knob;
     VisibleArea *stickyVisibleArea2;
@@ -1323,8 +1321,8 @@ on_PlotterDrawingArea_draw( __attribute__((unused)) GtkWidget *drawingArea,
 	//cairo_set_antialias (visibleSurfaceCr,CAIRO_ANTIALIAS_NONE);
 
 	// Initialise it to the drum image.
-	if(visible_pixbuf != NULL)
-	    gdk_cairo_set_source_pixbuf (visibleSurfaceCr, visible_pixbuf ,0.0,0.0);
+	//if(visible_pixbuf != NULL)
+	    gdk_cairo_set_source_pixbuf (visibleSurfaceCr, drum_pixbuf ,0.0,0.0);
 	
 	cairo_paint(visibleSurfaceCr);
 
@@ -1756,8 +1754,9 @@ void updateVisibleSurface(gboolean showPaper,
     
     //Reset the visible surface to the drum image before transfering
     // Paper and stickies into the visible surface.
-    gdk_cairo_set_source_pixbuf (visibleSurfaceCr, visible_pixbuf ,0.0,0.0);
-    //gdk_cairo_set_source_pixbuf (visibleSurfaceCr, drum_pixbuf ,0.0,0.0);
+    //gdk_cairo_set_source_pixbuf (visibleSurfaceCr, visible_pixbuf ,0.0,0.0);
+    
+    gdk_cairo_set_source_pixbuf (visibleSurfaceCr, drum_pixbuf ,0.0,0.0);
 
     //cairo_set_source_rgba(visibleSurfaceCr,1.0,0.0,0.0,1.0);
     cairo_paint(visibleSurfaceCr);
@@ -1765,7 +1764,7 @@ void updateVisibleSurface(gboolean showPaper,
     cairo_set_operator (visibleSurfaceCr,CAIRO_OPERATOR_OVER);
     if(showPaper)
     {
-	// Add the top sticky into the visibleSurface
+	// Add the small paper into the visibleSurface
 	showArea2(visibleSurfaceCr,paperSmall_pixbuf,
 		  PaperArea->x,PaperArea->y,
 		  DRAWABLE_DRUM_LEFT, DRUM_TOP,
@@ -2284,27 +2283,20 @@ static void plotPoint(void)
 	if(overPaper)
 	{
 	    gdouble x,y,xs,ys;
-	    //printf("ON  Paper %d %.1f\n",PenX,(2.0*PaperArea->x));
-	    // Draw full resolution version if paper loaded
-	    //if(paperSurfaceCr != NULL)
 
-	    // g_debug("PaperVisibleArea.top=%.1f PaperVisibleArea.bottom=%.1f\n",
-	    //	   PaperVisibleArea.top,PaperVisibleArea.bottom);
-	   
+	    // Draw on both resolutions of the paper
 	    if(!PaperVisibleArea.wrapped)
 	    {
 		xs = penx-PaperVisibleArea.left;
 		ys = peny-PaperVisibleArea.top;
-		//g_debug("(x,y) = (%.1f,%.1f)\n",x,y);
 	    }
 	    else
 	    {
 		xs = penx-PaperVisibleArea.left;
 		ys = peny-PaperVisibleArea.bottom;
-		wrapRange(y,DRUM_HIGH);
-		//g_debug("(x,y) = (%.1f,%.1f)\n",x,y);
+		
 	    }
-
+	    wrapRange(ys,DRUM_HIGH);
 
 	    x = 2.0 * xs;
 	    y = 2.0 * ys;
@@ -2323,6 +2315,23 @@ static void plotPoint(void)
 	    cairo_line_to(paperSmallCr,xs,ys);
 	    cairo_stroke(paperSmallCr);
 	    
+	}
+	else
+	{
+	    gdouble xs,ys;
+	    // Draw on the drum
+
+	    xs = penx;
+	    ys = peny;
+	    
+	    cairo_set_source_rgba(drumSurfaceCr,0.0,0.0,0.0,1.0);
+	    cairo_set_line_width(drumSurfaceCr, 1);
+	    cairo_set_line_cap(drumSurfaceCr, CAIRO_LINE_CAP_ROUND);
+	    cairo_move_to(drumSurfaceCr,xs,ys);
+	    cairo_line_to(drumSurfaceCr,xs,ys);
+	    cairo_stroke(drumSurfaceCr);
+
+
 	}
     }
 }
@@ -2566,9 +2575,9 @@ void PlotterTidy(GString *userPath)
    
 
  
-    g_string_printf(drumFileName,"%s%s",userPath->str,"Visible.png");
+    g_string_printf(drumFileName,"%s%s",userPath->str,"Drum2.png");
     
-    cairo_surface_write_to_png (cairo_get_target(visibleSurfaceCr),drumFileName->str);
+    cairo_surface_write_to_png (cairo_get_target(drumSurfaceCr),drumFileName->str);
 
     g_string_free(drumFileName,TRUE);
 
@@ -2585,6 +2594,8 @@ void PlotterTidy(GString *userPath)
     // Should probably save them all, but power and manual are the important ones 
     g_string_append_printf(configText,"ManualButton %d\n",PlotterManual ? 1 : 0);
     g_string_append_printf(configText,"PowerKnob %d\n",PowerSwitchOn ? 1 : 0);
+    g_string_append_printf(configText,"PenPosition %.1f %.1f\n",penx,peny);
+    
 
     updateConfigFile("PlotterState",userPath,configText);
 
@@ -2637,12 +2648,24 @@ static int savedPowerKnobHandler(int nn)
     return TRUE;
 }
 
+static int savedPenPositionHandler(int nn)
+{
+    gdouble px,py;
+    px = atof(getField(nn+1));
+    py = atof(getField(nn+2));
+    g_info("Pen moved to (%.1f,%.1f)\n",px,py);
+    penx = px;
+    peny = py;
+    return TRUE;
+}
+
 
 static Token savedStateTokens[] = {
     {"WindowPosition",0,savedWindowPositionHandler},
     {"PaperInfo",0,savedPaperInfoHandler},
     {"ManualButton",0,savedManualButtonHandler},
     {"PowerKnob",0,savedPowerKnobHandler},
+    {"PenPosition",0,savedPenPositionHandler},
     {NULL,0,NULL}
 };
 
@@ -2701,7 +2724,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 	drum_pixbuf =
 	    my_gdk_pixbuf_new_from_file(fileName->str);
     }
-
+#if 0
     g_string_printf(fileName,"%sPaper600x600.png",userPath->str);
     paperLarge_pixbuf =
 	gdk_pixbuf_new_from_file(fileName->str,NULL);
@@ -2758,7 +2781,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
     }
     
     g_debug("paperSmall_pixbuf=%p\n",paperSmall_pixbuf);
-    
+   
     g_string_printf(fileName,"%sVisible2.png",userPath->str);
     visible_pixbuf =
 	gdk_pixbuf_new_from_file(fileName->str,NULL);
@@ -2768,7 +2791,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 	visible_pixbuf =
 	    my_gdk_pixbuf_new_from_file(fileName->str);
     }
-
+#endif
     // Paper is loaded after the config file has been read.
 
     for(n=0;n<9;n++)
@@ -3007,12 +3030,10 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
     knobCount = knobNumber;    
 
-    penx = 0.0;
-    peny =  0.0;
+    //penx = 0.0;
+    //peny =  0.0;
 
-    // Set inital value for topLine
-    topLine = peny - MIDDLE_LINE;
-    wrapRange(topLine,DRUM_HIGH);
+
 
     PenDown = TRUE;
     
@@ -3025,6 +3046,11 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 
     readConfigFile("PlotterState",userPath,savedStateTokens);
 
+    // Set inital value for topLine
+    topLine = peny - MIDDLE_LINE;
+    wrapRange(topLine,DRUM_HIGH);
+
+#if 0    
     // If paper size/position had been configured load the high res image.
     // THe low res version of the paper is already drawn in the visible surface.
     if(PaperLoaded)
@@ -3055,7 +3081,7 @@ void PlotterInit( __attribute__((unused)) GtkBuilder *builder,
 	
 	cairo_paint(paperSurfaceCr);
     }
-    
+#endif    
 
     g_string_printf(fileName,"%sgraphics/Sticky.png",sharedPath->str);
     sticky_pixbuf =
